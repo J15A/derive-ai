@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { InkPoint, InkStroke, InkTool, Note } from "../types";
 import { drawStrokePolygon, strokePolygon, uid } from "../utils/ink";
 import { SelectionPopup } from "./SelectionPopup";
+import { textToStrokes } from "../utils/textToStrokes";
 
 interface InkCanvasProps {
   note: Note;
@@ -57,6 +58,8 @@ export function InkCanvas({
   const [eraserTrail, setEraserTrail] = useState<{ x: number; y: number }[]>([]);
   const [showPopup, setShowPopup] = useState(false);
   const [popupPosition, setPopupPosition] = useState<{ x: number; y: number }>({ x: 0, y: 0 });
+  const [textInput, setTextInput] = useState<{ x: number; y: number; worldX: number; worldY: number } | null>(null);
+  const [textValue, setTextValue] = useState("");
 
   const drawScene = useCallback(() => {
     const canvas = canvasRef.current;
@@ -213,9 +216,8 @@ export function InkCanvas({
     
     // Draw eraser trail
     if (eraserTrail.length > 1 && tool === "eraser") {
-      const currentSize = tool === "highlighter" ? highlighterSize : penSize;
       ctx.strokeStyle = "rgba(156, 163, 175, 0.4)"; // Faint grey
-      ctx.lineWidth = Math.max(2, currentSize * 0.5) / note.viewport.scale;
+      ctx.lineWidth = Math.max(2, penSize * 0.5) / note.viewport.scale;
       ctx.lineCap = "round";
       ctx.lineJoin = "round";
       
@@ -477,6 +479,14 @@ export function InkCanvas({
       return;
     }
     
+    if (tool === "text") {
+      const point = toWorldPoint(e.clientX, e.clientY);
+      const canvasPoint = getCanvasSpacePoint(e.clientX, e.clientY);
+      setTextInput({ x: canvasPoint.x, y: canvasPoint.y, worldX: point.x, worldY: point.y });
+      setTextValue("");
+      return;
+    }
+    
     if (tool === "selector") {
       const point = toWorldPoint(e.clientX, e.clientY);
       
@@ -699,12 +709,46 @@ export function InkCanvas({
     setShowPopup(false);
   };
 
+  const handleTextSubmit = async () => {
+    if (!textInput || !textValue.trim()) {
+      setTextInput(null);
+      setTextValue("");
+      return;
+    }
+
+    try {
+      const fontSize = 48;
+      const strokes = await textToStrokes(textValue, textInput.worldX, textInput.worldY, fontSize, color);
+      
+      for (const stroke of strokes) {
+        onAppendStroke(note.id, stroke);
+      }
+      
+      setTextInput(null);
+      setTextValue("");
+    } catch (error) {
+      console.error("Failed to convert text to strokes:", error);
+      setTextInput(null);
+      setTextValue("");
+    }
+  };
+
+  const handleTextKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === "Enter") {
+      e.preventDefault();
+      handleTextSubmit();
+    } else if (e.key === "Escape") {
+      setTextInput(null);
+      setTextValue("");
+    }
+  };
+
   return (
     <div className="relative h-full min-h-0 w-full overflow-hidden rounded-b-2xl bg-slate-50" ref={containerRef}>
       <canvas
         ref={canvasRef}
         className="block h-full w-full touch-none"
-        style={{ cursor: tool === "pan" ? "grab" : tool === "eraser" ? "cell" : tool === "selector" ? "default" : "crosshair" }}
+        style={{ cursor: tool === "pan" ? "grab" : tool === "eraser" ? "cell" : tool === "selector" ? "default" : tool === "text" ? "text" : "crosshair" }}
         onPointerDown={handlePointerDown}
         onPointerMove={handlePointerMove}
         onPointerUp={handlePointerUp}
@@ -720,6 +764,29 @@ export function InkCanvas({
           onSolve={handlePopupSolve}
           onClose={handlePopupClose}
         />
+      )}
+      
+      {textInput && (
+        <div
+          className="absolute z-50"
+          style={{
+            left: textInput.x,
+            top: textInput.y,
+            transform: "translateY(-50%)",
+          }}
+        >
+          <input
+            type="text"
+            autoFocus
+            value={textValue}
+            onChange={(e) => setTextValue(e.target.value)}
+            onKeyDown={handleTextKeyDown}
+            onBlur={handleTextSubmit}
+            className="rounded border-2 border-blue-500 bg-white px-3 py-2 text-2xl font-normal text-slate-900 shadow-lg outline-none"
+            placeholder="Type text..."
+            style={{ minWidth: "200px" }}
+          />
+        </div>
       )}
     </div>
   );

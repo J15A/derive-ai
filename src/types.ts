@@ -1,4 +1,4 @@
-export type InkTool = "pen" | "eraser" | "pan" | "selector" | "highlighter";
+export type InkTool = "pen" | "eraser" | "pan" | "selector" | "highlighter" | "text";
 
 export interface InkPoint {
   x: number;

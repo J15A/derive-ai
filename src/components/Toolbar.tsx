@@ -18,7 +18,8 @@ import {
   Redo,
   Image,
   Package,
-  Upload
+  Upload,
+  TextCursor
 } from "lucide-react";
 import { useState } from "react";
 
@@ -205,6 +206,7 @@ export function Toolbar({
         {toolButton("eraser", <Eraser size={20} />)}
         {toolButton("pan", <Hand size={20} />)}
         {toolButton("selector", <SquareDashedMousePointer size={20} />)}
+        {toolButton("text", <TextCursor size={20} />)}
         
         {/* Highlighter with color dropdown */}
         <div 
