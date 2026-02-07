@@ -157,8 +157,8 @@ export function Toolbar({
   };
 
   return (
-    <div className="flex min-w-0 items-center gap-2 border-b border-slate-100 p-3 max-sm:flex-wrap">
-      <div className="flex min-w-0 items-center gap-2 max-sm:w-full max-sm:overflow-x-auto max-sm:pb-1">
+    <div className="relative z-40 flex min-w-0 items-center gap-2 border-b border-slate-100 p-3 max-sm:flex-wrap">
+      <div className="flex min-w-0 items-center gap-2 max-sm:w-full max-sm:overflow-x-auto max-sm:pb-1 hide-scrollbar">
         {/* Pen with color dropdown */}
         <div 
           className="relative"
@@ -179,7 +179,7 @@ export function Toolbar({
           
           {/* Color dropdown menu */}
           {showPenMenu && (
-            <div className="absolute left-0 top-10 z-50 flex flex-col gap-2 rounded-lg border border-slate-200 bg-white p-2 shadow-lg">
+            <div className="absolute left-0 top-10 z-[120] flex flex-col gap-2 rounded-lg border border-slate-200 bg-white p-2 shadow-lg max-sm:fixed max-sm:left-3 max-sm:right-3 max-sm:top-[4.5rem]">
               <div className="flex gap-1">
                 {PEN_COLORS.map((c) => (
                   <button
@@ -232,7 +232,7 @@ export function Toolbar({
           </button>
 
           {showHighlighterMenu && (
-            <div className="absolute left-0 top-10 z-50 flex flex-col gap-2 rounded-lg border border-slate-200 bg-white p-2 shadow-lg">
+            <div className="absolute left-0 top-10 z-[120] flex flex-col gap-2 rounded-lg border border-slate-200 bg-white p-2 shadow-lg max-sm:fixed max-sm:left-3 max-sm:right-3 max-sm:top-[4.5rem]">
               <div className="flex gap-1">
                 {HIGHLIGHTER_COLORS.map((c) => (
                   <button
@@ -290,7 +290,7 @@ export function Toolbar({
         </button>
       </div>
 
-      <div className="ml-auto flex items-center gap-2 max-sm:ml-0 max-sm:w-full max-sm:justify-start max-sm:gap-1 max-sm:overflow-x-auto max-sm:pb-1">
+      <div className="ml-auto flex items-center gap-2 max-sm:ml-0 max-sm:w-full max-sm:justify-start max-sm:gap-1 max-sm:overflow-x-auto max-sm:pb-1 hide-scrollbar">
         <button className="tool-btn" type="button" onClick={onZoomOut} title="Zoom Out">
           <ZoomOut size={20} />
         </button>
@@ -339,7 +339,7 @@ export function Toolbar({
             <Settings size={20} />
           </summary>
 
-          <div className="absolute right-0 top-11 z-30 w-[320px] space-y-3 rounded-xl border border-slate-200 bg-white p-3 shadow-2xl">
+          <div className="absolute right-0 top-11 z-[120] w-[320px] space-y-3 rounded-xl border border-slate-200 bg-white p-3 shadow-2xl max-sm:fixed max-sm:left-3 max-sm:right-3 max-sm:top-[4.5rem] max-sm:w-auto">
             <div>
               <div className="grid grid-cols-3 gap-2">
                 <button className="btn flex flex-col items-center justify-center gap-1" type="button" onClick={onExportPng} title="Export PNG">

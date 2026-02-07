@@ -43,6 +43,15 @@
     @apply w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm outline-none ring-0 transition placeholder:text-slate-400 focus:border-slate-500;
   }
 
+  .hide-scrollbar {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+
+  .hide-scrollbar::-webkit-scrollbar {
+    display: none;
+  }
+
   .markdown-body h1 {
     @apply mt-0 text-2xl font-semibold;
   }

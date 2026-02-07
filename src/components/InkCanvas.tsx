@@ -1,9 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import type { InkPoint, InkStroke, InkTool, Note, TextAnnotation, WhiteboardImage } from "../types";
+import type { InkPoint, InkStroke, InkTool, Note, TextAnnotation } from "../types";
 import { drawStrokePolygon, strokePolygon, strokesToPngDataUrl, uid } from "../utils/ink";
 import { solveEquation, recognizeEquationForGraph } from "../api/client";
 import { SelectionPopup } from "./SelectionPopup";
-import { textToImage } from "../utils/textToImage";
 
 interface InkCanvasProps {
   note: Note;
@@ -19,7 +18,6 @@ interface InkCanvasProps {
   onDuplicateStrokes: (noteId: string, strokeIds: string[]) => string[];
   onChangeStrokesColor: (noteId: string, strokeIds: string[], newColor: string) => void;
   onAddTextAnnotation: (noteId: string, annotation: TextAnnotation) => void;
-  onAddImage: (noteId: string, image: WhiteboardImage) => void;
   onDeleteImages: (noteId: string, imageIds: string[]) => void;
   onMoveImages: (noteId: string, imageIds: string[], dx: number, dy: number) => void;
   onScaleStrokes: (noteId: string, strokeIds: string[], scale: number, centerX: number, centerY: number) => void;
@@ -31,31 +29,31 @@ interface InkCanvasProps {
 }
 
 const BACKGROUND = "#f8fafc";
+const INSERT_TEXT_COLOR = "#000000";
 
 export function InkCanvas({
-  note,
-  tool,
-  color,
-  penSize,
-  highlighterSize,
-  showGrid,
-  onAppendStroke,
-  onEraseAt,
-  onDeleteStrokes,
-  onMoveStrokes,
-  onDeleteImages,
-  onMoveImages,
-  onScaleStrokes,
-  onScaleImages,
-  onDuplicateStrokes,
-  onChangeStrokesColor,
-  onAddTextAnnotation,
-  onAddImage,
-  onPanViewport,
-  onZoomViewportAt,
-  onAddToGraph,
-  onExportReady,
-}: InkCanvasProps): JSX.Element {
+                            note,
+                            tool,
+                            color,
+                            penSize,
+                            highlighterSize,
+                            showGrid,
+                            onAppendStroke,
+                            onEraseAt,
+                            onDeleteStrokes,
+                            onMoveStrokes,
+                            onDeleteImages,
+                            onMoveImages,
+                            onScaleStrokes,
+                            onScaleImages,
+                            onDuplicateStrokes,
+                            onChangeStrokesColor,
+                            onAddTextAnnotation,
+                            onPanViewport,
+                            onZoomViewportAt,
+                            onAddToGraph,
+                            onExportReady,
+                          }: InkCanvasProps): JSX.Element {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const rafRef = useRef<number | null>(null);
@@ -65,7 +63,7 @@ export function InkCanvas({
   const panPointerId = useRef<number | null>(null);
   const currentPointsRef = useRef<InkPoint[]>([]);
   const lastPanRef = useRef<{ x: number; y: number } | null>(null);
-  
+
   const [selectionBox, setSelectionBox] = useState<{ startX: number; startY: number; endX: number; endY: number } | null>(null);
   const [selectedStrokes, setSelectedStrokes] = useState<string[]>([]);
   const [selectedImages, setSelectedImages] = useState<string[]>([]);
@@ -134,10 +132,10 @@ export function InkCanvas({
 
     for (const stroke of note.strokes) {
       const opacity = stroke.tool === "highlighter" ? 0.4 : 1;
-      
+
       ctx.save();
       ctx.globalAlpha = opacity;
-      
+
       const polygon = strokePolygon(stroke);
       if (polygon.length >= 2) {
         drawStrokePolygon(ctx, polygon, stroke.color, 0, 0);
@@ -151,36 +149,36 @@ export function InkCanvas({
           ctx.fill();
         }
       }
-      
+
       ctx.restore();
     }
-    
+
     // Render text annotations in world coordinates with handwritten style
     for (const annotation of note.textAnnotations ?? []) {
       ctx.save();
-      
+
       // Use Caveat - a natural handwriting font
       ctx.font = `700 ${annotation.fontSize}px "Caveat", "Bradley Hand", "Brush Script MT", cursive`;
       ctx.fillStyle = annotation.color;
       ctx.textBaseline = "top";
-      
+
       // Add subtle shadow for depth
       ctx.shadowColor = "rgba(0, 0, 0, 0.08)";
       ctx.shadowBlur = 1.5 / note.viewport.scale;
       ctx.shadowOffsetX = 0.5 / note.viewport.scale;
       ctx.shadowOffsetY = 0.5 / note.viewport.scale;
-      
+
       // Split text by newlines and render each line
-      const lines = annotation.text.split('\n');
+      const lines = annotation.text.split("\n");
       const lineHeight = annotation.fontSize * 1.1; // Tighter line spacing (1.1x)
-      
+
       lines.forEach((line, index) => {
-        ctx.fillText(line, annotation.x, annotation.y + (index * lineHeight));
+        ctx.fillText(line, annotation.x, annotation.y + index * lineHeight);
       });
-      
+
       ctx.restore();
     }
-    
+
     // Draw images
     for (const image of note.images) {
       const img = loadedImages.get(image.id);
@@ -188,20 +186,20 @@ export function InkCanvas({
         ctx.drawImage(img, image.x, image.y, image.width, image.height);
       }
     }
-    
+
     // Draw single bounding box for all selected strokes and images
     if ((selectedStrokes.length > 0 || selectedImages.length > 0) && tool === "selector") {
       let minX = Infinity;
       let minY = Infinity;
       let maxX = -Infinity;
       let maxY = -Infinity;
-      
+
       for (const stroke of note.strokes) {
         if (selectedStrokes.includes(stroke.id)) {
           const points = stroke.points;
           if (points.length > 0) {
-            const xs = points.map(p => p.x);
-            const ys = points.map(p => p.y);
+            const xs = points.map((p) => p.x);
+            const ys = points.map((p) => p.y);
             minX = Math.min(minX, ...xs);
             minY = Math.min(minY, ...ys);
             maxX = Math.max(maxX, ...xs);
@@ -209,7 +207,7 @@ export function InkCanvas({
           }
         }
       }
-      
+
       for (const image of note.images) {
         if (selectedImages.includes(image.id)) {
           minX = Math.min(minX, image.x);
@@ -218,27 +216,27 @@ export function InkCanvas({
           maxY = Math.max(maxY, image.y + image.height);
         }
       }
-      
+
       if (minX !== Infinity && maxX !== -Infinity) {
         ctx.strokeStyle = "#3b82f6";
         ctx.lineWidth = 2 / note.viewport.scale;
         ctx.setLineDash([5 / note.viewport.scale, 5 / note.viewport.scale]);
         ctx.strokeRect(minX - 5, minY - 5, maxX - minX + 10, maxY - minY + 10);
         ctx.setLineDash([]);
-        
+
         // Draw resize handles at corners
         const handleSize = 8 / note.viewport.scale;
         ctx.fillStyle = "#ffffff";
         ctx.strokeStyle = "#3b82f6";
         ctx.lineWidth = 2 / note.viewport.scale;
-        
+
         const handles = [
           { x: minX - 5, y: minY - 5, id: "nw" },
           { x: maxX + 5, y: minY - 5, id: "ne" },
           { x: maxX + 5, y: maxY + 5, id: "se" },
           { x: minX - 5, y: maxY + 5, id: "sw" },
         ];
-        
+
         for (const handle of handles) {
           ctx.fillRect(handle.x - handleSize / 2, handle.y - handleSize / 2, handleSize, handleSize);
           ctx.strokeRect(handle.x - handleSize / 2, handle.y - handleSize / 2, handleSize, handleSize);
@@ -269,8 +267,8 @@ export function InkCanvas({
       const polygon = strokePolygon(tempStroke);
       if (polygon.length >= 2) {
         ctx.save();
-      ctx.globalAlpha = tool === "highlighter" ? 0.4 : 1;
-      drawStrokePolygon(ctx, polygon, tempStroke.color, 0, 0);
+        ctx.globalAlpha = tool === "highlighter" ? 0.4 : 1;
+        drawStrokePolygon(ctx, polygon, tempStroke.color, 0, 0);
       } else {
         const point = tempStroke.points[tempStroke.points.length - 1];
         if (point) {
@@ -283,27 +281,27 @@ export function InkCanvas({
       }
       ctx.restore();
     }
-    
+
     if (selectionBox && tool === "selector") {
       ctx.strokeStyle = "#3b82f6";
       ctx.lineWidth = 2 / note.viewport.scale;
       ctx.setLineDash([5 / note.viewport.scale, 5 / note.viewport.scale]);
       ctx.strokeRect(
-        Math.min(selectionBox.startX, selectionBox.endX),
-        Math.min(selectionBox.startY, selectionBox.endY),
-        Math.abs(selectionBox.endX - selectionBox.startX),
-        Math.abs(selectionBox.endY - selectionBox.startY)
+          Math.min(selectionBox.startX, selectionBox.endX),
+          Math.min(selectionBox.startY, selectionBox.endY),
+          Math.abs(selectionBox.endX - selectionBox.startX),
+          Math.abs(selectionBox.endY - selectionBox.startY),
       );
       ctx.setLineDash([]);
     }
-    
+
     // Draw eraser trail
     if (eraserTrail.length > 1 && tool === "eraser") {
       ctx.strokeStyle = "rgba(156, 163, 175, 0.4)"; // Faint grey
       ctx.lineWidth = Math.max(2, penSize * 0.5) / note.viewport.scale;
       ctx.lineCap = "round";
       ctx.lineJoin = "round";
-      
+
       ctx.beginPath();
       ctx.moveTo(eraserTrail[0].x, eraserTrail[0].y);
       for (let i = 1; i < eraserTrail.length; i++) {
@@ -313,7 +311,23 @@ export function InkCanvas({
     }
 
     ctx.restore();
-  }, [color, note.strokes, note.images, note.viewport.offsetX, note.viewport.offsetY, note.viewport.scale, showGrid, penSize, highlighterSize, tool, selectedStrokes, selectedImages, selectionBox, eraserTrail, loadedImages]);
+  }, [
+    color,
+    note.strokes,
+    note.images,
+    note.viewport.offsetX,
+    note.viewport.offsetY,
+    note.viewport.scale,
+    showGrid,
+    penSize,
+    highlighterSize,
+    tool,
+    selectedStrokes,
+    selectedImages,
+    selectionBox,
+    eraserTrail,
+    loadedImages,
+  ]);
 
   const scheduleDraw = useCallback(() => {
     if (rafRef.current !== null) {
@@ -375,7 +389,7 @@ export function InkCanvas({
         img.src = image.dataUrl;
         newLoadedImages.set(image.id, img);
         hasChanges = true;
-        
+
         img.onload = () => {
           scheduleDraw();
         };
@@ -406,7 +420,7 @@ export function InkCanvas({
       setResizeHandle(null);
       setResizeStart(null);
     }
-    
+
     // Clear eraser trail when switching tools
     if (tool !== "eraser") {
       setEraserTrail([]);
@@ -421,13 +435,13 @@ export function InkCanvas({
       let minY = Infinity;
       let maxX = -Infinity;
       let maxY = -Infinity;
-      
+
       for (const stroke of note.strokes) {
         if (selectedStrokes.includes(stroke.id)) {
           const points = stroke.points;
           if (points.length > 0) {
-            const xs = points.map(p => p.x);
-            const ys = points.map(p => p.y);
+            const xs = points.map((p) => p.x);
+            const ys = points.map((p) => p.y);
             minX = Math.min(minX, ...xs);
             minY = Math.min(minY, ...ys);
             maxX = Math.max(maxX, ...xs);
@@ -435,7 +449,7 @@ export function InkCanvas({
           }
         }
       }
-      
+
       for (const image of note.images) {
         if (selectedImages.includes(image.id)) {
           minX = Math.min(minX, image.x);
@@ -444,7 +458,7 @@ export function InkCanvas({
           maxY = Math.max(maxY, image.y + image.height);
         }
       }
-      
+
       if (minX !== Infinity && maxX !== -Infinity) {
         // Convert world coordinates to canvas/screen coordinates
         const canvas = canvasRef.current;
@@ -453,10 +467,10 @@ export function InkCanvas({
           // Center horizontally, position below the bottom of the selection
           const centerX = (minX + maxX) / 2;
           const bottomY = maxY + 10; // 10px padding in world space
-          
+
           const canvasX = centerX * note.viewport.scale + note.viewport.offsetX;
           const canvasY = bottomY * note.viewport.scale + note.viewport.offsetY;
-          
+
           // Position popup relative to the viewport (fixed positioning)
           setPopupPosition({
             x: rect.left + canvasX,
@@ -495,31 +509,31 @@ export function InkCanvas({
   }, []);
 
   const toWorldPoint = useCallback(
-    (clientX: number, clientY: number): { x: number; y: number } => {
-      const canvasPoint = getCanvasSpacePoint(clientX, clientY);
-      const x = (canvasPoint.x - note.viewport.offsetX) / note.viewport.scale;
-      const y = (canvasPoint.y - note.viewport.offsetY) / note.viewport.scale;
-      return { x, y };
-    },
-    [getCanvasSpacePoint, note.viewport.offsetX, note.viewport.offsetY, note.viewport.scale],
+      (clientX: number, clientY: number): { x: number; y: number } => {
+        const canvasPoint = getCanvasSpacePoint(clientX, clientY);
+        const x = (canvasPoint.x - note.viewport.offsetX) / note.viewport.scale;
+        const y = (canvasPoint.y - note.viewport.offsetY) / note.viewport.scale;
+        return { x, y };
+      },
+      [getCanvasSpacePoint, note.viewport.offsetX, note.viewport.offsetY, note.viewport.scale],
   );
 
   const pushPointerEvent = useCallback(
-    (event: PointerEvent | React.PointerEvent<HTMLCanvasElement>) => {
-      const coalesced = "getCoalescedEvents" in event ? event.getCoalescedEvents() : [event];
-      const samples = coalesced.length > 0 ? coalesced : [event];
-      for (const e of samples) {
-        const world = toWorldPoint(e.clientX, e.clientY);
-        currentPointsRef.current.push({
-          x: world.x,
-          y: world.y,
-          pressure: Math.max(0.1, e.pressure || 0.5),
-          timestamp: performance.now(),
-        });
-      }
-      scheduleDraw();
-    },
-    [scheduleDraw, toWorldPoint],
+      (event: PointerEvent | React.PointerEvent<HTMLCanvasElement>) => {
+        const coalesced = "getCoalescedEvents" in event ? event.getCoalescedEvents() : [event];
+        const samples = coalesced.length > 0 ? coalesced : [event];
+        for (const e of samples) {
+          const world = toWorldPoint(e.clientX, e.clientY);
+          currentPointsRef.current.push({
+            x: world.x,
+            y: world.y,
+            pressure: Math.max(0.1, e.pressure || 0.5),
+            timestamp: performance.now(),
+          });
+        }
+        scheduleDraw();
+      },
+      [scheduleDraw, toWorldPoint],
   );
 
   useEffect(() => {
@@ -565,7 +579,7 @@ export function InkCanvas({
     const currentSize = tool === "highlighter" ? highlighterSize : penSize;
     const stroke: InkStroke = {
       id: uid(),
-      tool: (tool === "pen" || tool === "highlighter") ? tool : "pen",
+      tool: tool === "pen" || tool === "highlighter" ? tool : "pen",
       color,
       baseSize: currentSize,
       points: [...currentPointsRef.current],
@@ -591,7 +605,7 @@ export function InkCanvas({
 
     // Allow panning with middle mouse button for any tool
     const shouldPan = e.button === 1 || tool === "pan";
-    
+
     if (shouldPan) {
       panPointerId.current = e.pointerId;
       lastPanRef.current = { x: e.clientX, y: e.clientY };
@@ -608,7 +622,7 @@ export function InkCanvas({
       onEraseAt(note.id, point.x, point.y, eraserRadius);
       return;
     }
-    
+
     if (tool === "text") {
       const point = toWorldPoint(e.clientX, e.clientY);
       const canvasPoint = getCanvasSpacePoint(e.clientX, e.clientY);
@@ -616,23 +630,23 @@ export function InkCanvas({
       setTextValue("");
       return;
     }
-    
+
     if (tool === "selector") {
       const point = toWorldPoint(e.clientX, e.clientY);
-      
+
       // First check if clicking on a resize handle
       if (selectedStrokes.length > 0 || selectedImages.length > 0) {
         let minX = Infinity;
         let minY = Infinity;
         let maxX = -Infinity;
         let maxY = -Infinity;
-        
+
         for (const stroke of note.strokes) {
           if (selectedStrokes.includes(stroke.id)) {
             const points = stroke.points;
             if (points.length > 0) {
-              const xs = points.map(p => p.x);
-              const ys = points.map(p => p.y);
+              const xs = points.map((p) => p.x);
+              const ys = points.map((p) => p.y);
               minX = Math.min(minX, ...xs);
               minY = Math.min(minY, ...ys);
               maxX = Math.max(maxX, ...xs);
@@ -640,7 +654,7 @@ export function InkCanvas({
             }
           }
         }
-        
+
         for (const image of note.images) {
           if (selectedImages.includes(image.id)) {
             minX = Math.min(minX, image.x);
@@ -649,26 +663,26 @@ export function InkCanvas({
             maxY = Math.max(maxY, image.y + image.height);
           }
         }
-        
+
         if (minX !== Infinity && maxX !== -Infinity) {
           const handleSize = 8 / note.viewport.scale;
           const tolerance = handleSize;
-          
+
           const handles = [
             { x: minX - 5, y: minY - 5, id: "nw" },
             { x: maxX + 5, y: minY - 5, id: "ne" },
             { x: maxX + 5, y: maxY + 5, id: "se" },
             { x: minX - 5, y: maxY + 5, id: "sw" },
           ];
-          
+
           for (const handle of handles) {
             if (Math.abs(point.x - handle.x) <= tolerance && Math.abs(point.y - handle.y) <= tolerance) {
               setIsResizing(true);
               setResizeHandle(handle.id);
-              setResizeStart({ 
-                x: point.x, 
-                y: point.y, 
-                bounds: { minX: minX - 5, minY: minY - 5, maxX: maxX + 5, maxY: maxY + 5 }
+              setResizeStart({
+                x: point.x,
+                y: point.y,
+                bounds: { minX: minX - 5, minY: minY - 5, maxX: maxX + 5, maxY: maxY + 5 },
               });
               drawingPointerId.current = e.pointerId;
               canvas.setPointerCapture(e.pointerId);
@@ -677,31 +691,29 @@ export function InkCanvas({
           }
         }
       }
-      
+
       // Check if clicking on a selected image first (images are on top)
-      const clickedImage = note.images.find(image => {
+      const clickedImage = note.images.find((image) => {
         if (!selectedImages.includes(image.id)) return false;
-        return point.x >= image.x && point.x <= image.x + image.width &&
-               point.y >= image.y && point.y <= image.y + image.height;
+        return point.x >= image.x && point.x <= image.x + image.width && point.y >= image.y && point.y <= image.y + image.height;
       });
-      
+
       // Then check if clicking on selected strokes
-      const clickedStroke = note.strokes.find(stroke => {
+      const clickedStroke = note.strokes.find((stroke) => {
         if (!selectedStrokes.includes(stroke.id)) return false;
         const points = stroke.points;
         if (points.length === 0) return false;
-        
-        const xs = points.map(p => p.x);
-        const ys = points.map(p => p.y);
+
+        const xs = points.map((p) => p.x);
+        const ys = points.map((p) => p.y);
         const minX = Math.min(...xs);
         const minY = Math.min(...ys);
         const maxX = Math.max(...xs);
         const maxY = Math.max(...ys);
-        
-        return point.x >= minX - 5 && point.x <= maxX + 5 && 
-               point.y >= minY - 5 && point.y <= maxY + 5;
+
+        return point.x >= minX - 5 && point.x <= maxX + 5 && point.y >= minY - 5 && point.y <= maxY + 5;
       });
-      
+
       if (clickedImage || clickedStroke) {
         setIsDraggingSelection(true);
         setDragOffset({ x: point.x, y: point.y });
@@ -754,82 +766,66 @@ export function InkCanvas({
 
     if (tool === "eraser") {
       const point = toWorldPoint(e.clientX, e.clientY);
-      
+
       // Add to trail (limit to last 30 points for performance)
-      setEraserTrail(prev => {
+      setEraserTrail((prev) => {
         const newTrail = [...prev, point];
         return newTrail.length > 30 ? newTrail.slice(-30) : newTrail;
       });
-      
+
       onEraseAt(note.id, point.x, point.y, eraserRadius);
       return;
     }
-    
+
     if (tool === "selector") {
       const point = toWorldPoint(e.clientX, e.clientY);
-      
+
       if (isResizing && resizeStart && resizeHandle) {
         // Calculate scale based on resize handle movement
         const bounds = resizeStart.bounds;
         const centerX = (bounds.minX + bounds.maxX) / 2;
         const centerY = (bounds.minY + bounds.maxY) / 2;
-        
+
         let scale = 1;
-        
+
         if (resizeHandle === "se") {
           // Bottom-right: scale based on distance from top-left
-          const originalDist = Math.sqrt(
-            Math.pow(bounds.maxX - bounds.minX, 2) + Math.pow(bounds.maxY - bounds.minY, 2)
-          );
-          const newDist = Math.sqrt(
-            Math.pow(point.x - bounds.minX, 2) + Math.pow(point.y - bounds.minY, 2)
-          );
+          const originalDist = Math.sqrt(Math.pow(bounds.maxX - bounds.minX, 2) + Math.pow(bounds.maxY - bounds.minY, 2));
+          const newDist = Math.sqrt(Math.pow(point.x - bounds.minX, 2) + Math.pow(point.y - bounds.minY, 2));
           scale = newDist / originalDist;
         } else if (resizeHandle === "nw") {
           // Top-left: scale based on distance from bottom-right
-          const originalDist = Math.sqrt(
-            Math.pow(bounds.maxX - bounds.minX, 2) + Math.pow(bounds.maxY - bounds.minY, 2)
-          );
-          const newDist = Math.sqrt(
-            Math.pow(bounds.maxX - point.x, 2) + Math.pow(bounds.maxY - point.y, 2)
-          );
+          const originalDist = Math.sqrt(Math.pow(bounds.maxX - bounds.minX, 2) + Math.pow(bounds.maxY - bounds.minY, 2));
+          const newDist = Math.sqrt(Math.pow(bounds.maxX - point.x, 2) + Math.pow(bounds.maxY - point.y, 2));
           scale = newDist / originalDist;
         } else if (resizeHandle === "ne") {
           // Top-right: scale based on distance from bottom-left
-          const originalDist = Math.sqrt(
-            Math.pow(bounds.maxX - bounds.minX, 2) + Math.pow(bounds.maxY - bounds.minY, 2)
-          );
-          const newDist = Math.sqrt(
-            Math.pow(point.x - bounds.minX, 2) + Math.pow(bounds.maxY - point.y, 2)
-          );
+          const originalDist = Math.sqrt(Math.pow(bounds.maxX - bounds.minX, 2) + Math.pow(bounds.maxY - bounds.minY, 2));
+          const newDist = Math.sqrt(Math.pow(point.x - bounds.minX, 2) + Math.pow(bounds.maxY - point.y, 2));
           scale = newDist / originalDist;
         } else if (resizeHandle === "sw") {
           // Bottom-left: scale based on distance from top-right
-          const originalDist = Math.sqrt(
-            Math.pow(bounds.maxX - bounds.minX, 2) + Math.pow(bounds.maxY - bounds.minY, 2)
-          );
-          const newDist = Math.sqrt(
-            Math.pow(bounds.maxX - point.x, 2) + Math.pow(point.y - bounds.minY, 2)
-          );
+          const originalDist = Math.sqrt(Math.pow(bounds.maxX - bounds.minX, 2) + Math.pow(bounds.maxY - bounds.minY, 2));
+          const newDist = Math.sqrt(Math.pow(bounds.maxX - point.x, 2) + Math.pow(point.y - bounds.minY, 2));
           scale = newDist / originalDist;
         }
-        
+
         // Clamp scale to reasonable values
         scale = Math.max(0.1, Math.min(10, scale));
-        
+
         onScaleStrokes(note.id, selectedStrokes, scale, centerX, centerY);
         onScaleImages(note.id, selectedImages, scale, centerX, centerY);
-        
+
         // Update resize start for next frame
-        setResizeStart({ 
-          x: point.x, 
-          y: point.y, 
+        setResizeStart({
+          x: point.x,
+          y: point.y,
           bounds: {
             minX: centerX + (bounds.minX - centerX) * scale,
             minY: centerY + (bounds.minY - centerY) * scale,
             maxX: centerX + (bounds.maxX - centerX) * scale,
             maxY: centerY + (bounds.maxY - centerY) * scale,
-          }
+          },
         });
         scheduleDraw();
       } else if (isDraggingSelection && dragOffset) {
@@ -840,7 +836,7 @@ export function InkCanvas({
         setDragOffset(point);
         scheduleDraw();
       } else if (selectionBox) {
-        setSelectionBox(prev => prev ? { ...prev, endX: point.x, endY: point.y } : null);
+        setSelectionBox((prev) => (prev ? { ...prev, endX: point.x, endY: point.y } : null));
         scheduleDraw();
       }
       return;
@@ -887,22 +883,23 @@ export function InkCanvas({
           const maxX = Math.max(selectionBox.startX, selectionBox.endX);
           const minY = Math.min(selectionBox.startY, selectionBox.endY);
           const maxY = Math.max(selectionBox.startY, selectionBox.endY);
-          
-          const selectedStrokeIds = note.strokes.filter(stroke => {
-            const points = stroke.points;
-            if (points.length === 0) return false;
-            
-            return points.some(p => p.x >= minX && p.x <= maxX && p.y >= minY && p.y <= maxY);
-          }).map(s => s.id);
-          
-          const selectedImageIds = note.images.filter(image => {
-            // Check if image intersects with selection box
-            return !(image.x + image.width < minX || 
-                    image.x > maxX || 
-                    image.y + image.height < minY || 
-                    image.y > maxY);
-          }).map(img => img.id);
-          
+
+          const selectedStrokeIds = note.strokes
+              .filter((stroke) => {
+                const points = stroke.points;
+                if (points.length === 0) return false;
+
+                return points.some((p) => p.x >= minX && p.x <= maxX && p.y >= minY && p.y <= maxY);
+              })
+              .map((s) => s.id);
+
+          const selectedImageIds = note.images
+              .filter((image) => {
+                // Check if image intersects with selection box
+                return !(image.x + image.width < minX || image.x > maxX || image.y + image.height < minY || image.y > maxY);
+              })
+              .map((img) => img.id);
+
           setSelectedStrokes(selectedStrokeIds);
           setSelectedImages(selectedImageIds);
           setSelectionBox(null);
@@ -969,9 +966,7 @@ export function InkCanvas({
   };
 
   const handlePopupSolve = async () => {
-    const selectedStrokeObjects = note.strokes.filter(stroke => 
-      selectedStrokes.includes(stroke.id)
-    );
+    const selectedStrokeObjects = note.strokes.filter((stroke) => selectedStrokes.includes(stroke.id));
 
     if (selectedStrokeObjects.length === 0) return;
 
@@ -1023,10 +1018,10 @@ export function InkCanvas({
       };
 
       onAddTextAnnotation(note.id, annotation);
-      
+
       // Force immediate redraw to show the solution
       scheduleDraw();
-      
+
       // Clear selection so user can see the solution immediately
       setSelectedStrokes([]);
       setSelectionBox(null);
@@ -1045,28 +1040,26 @@ export function InkCanvas({
   };
 
   const handlePopupAddToGraph = async () => {
-    const selectedStrokeObjects = note.strokes.filter(stroke =>
-      selectedStrokes.includes(stroke.id)
-    );
+    const selectedStrokeObjects = note.strokes.filter((stroke) => selectedStrokes.includes(stroke.id));
     if (selectedStrokeObjects.length === 0) return;
 
     setIsGraphing(true);
     console.log("📈 Adding to graph:", selectedStrokeObjects.length, "strokes");
-    
+
     try {
       const imageDataUrl = strokesToPngDataUrl(selectedStrokeObjects);
       console.log("📸 Generated image data URL, length:", imageDataUrl.length);
-      
+
       const latex = await recognizeEquationForGraph(imageDataUrl);
       console.log("✅ Recognized LaTeX:", latex);
-      
+
       if (onAddToGraph) {
         onAddToGraph(latex);
         console.log("📊 Added to graph panel");
       } else {
         console.warn("⚠️ onAddToGraph callback is not defined");
       }
-      
+
       setSelectedStrokes([]);
       setSelectionBox(null);
     } catch (error) {
@@ -1083,25 +1076,23 @@ export function InkCanvas({
     setShowPopup(false);
   };
 
-  const handleTextSubmit = async () => {
+  const handleTextSubmit = () => {
     if (!textInput || !textValue.trim()) {
       setTextInput(null);
       setTextValue("");
       return;
     }
 
-    const image = await textToImage(
-      textValue.trim(),
-      textInput.worldX,
-      textInput.worldY,
-      56,
-      color,
-    );
+    const annotation: TextAnnotation = {
+      id: uid(),
+      x: textInput.worldX,
+      y: textInput.worldY,
+      text: textValue.trim(),
+      fontSize: 56,
+      color: INSERT_TEXT_COLOR, // <- always black
+    };
 
-    if (image) {
-      onAddImage(note.id, image);
-    }
-
+    onAddTextAnnotation(note.id, annotation);
     setTextInput(null);
     setTextValue("");
     scheduleDraw();
@@ -1118,54 +1109,54 @@ export function InkCanvas({
   };
 
   return (
-    <div className="relative h-full min-h-0 w-full overflow-hidden rounded-b-2xl bg-slate-50" ref={containerRef}>
-      <canvas
-        ref={canvasRef}
-        className="block h-full w-full touch-none"
-        style={{ cursor: tool === "pan" ? "grab" : tool === "eraser" ? "cell" : tool === "selector" ? "default" : tool === "text" ? "text" : "crosshair" }}
-        onPointerDown={handlePointerDown}
-        onPointerMove={handlePointerMove}
-        onPointerUp={handlePointerUp}
-        onPointerCancel={handlePointerUp}
-        onWheel={handleWheel}
-      />
-      
-      {showPopup && (
-        <SelectionPopup
-          position={popupPosition}
-          isSolving={isSolving}
-          isGraphing={isGraphing}
-          onDelete={handlePopupDelete}
-          onDuplicate={handlePopupDuplicate}
-          onChangeColor={handlePopupChangeColor}
-          onSolve={handlePopupSolve}
-          onAddToGraph={handlePopupAddToGraph}
-          onClose={handlePopupClose}
+      <div className="relative h-full min-h-0 w-full overflow-hidden rounded-b-2xl bg-slate-50" ref={containerRef}>
+        <canvas
+            ref={canvasRef}
+            className="block h-full w-full touch-none"
+            style={{ cursor: tool === "pan" ? "grab" : tool === "eraser" ? "cell" : tool === "selector" ? "default" : tool === "text" ? "text" : "crosshair" }}
+            onPointerDown={handlePointerDown}
+            onPointerMove={handlePointerMove}
+            onPointerUp={handlePointerUp}
+            onPointerCancel={handlePointerUp}
+            onWheel={handleWheel}
         />
-      )}
-      
-      {textInput && (
-        <div
-          className="absolute z-50"
-          style={{
-            left: textInput.x,
-            top: textInput.y,
-            transform: "translateY(-50%)",
-          }}
-        >
-          <input
-            type="text"
-            autoFocus
-            value={textValue}
-            onChange={(e) => setTextValue(e.target.value)}
-            onKeyDown={handleTextKeyDown}
-            onBlur={handleTextSubmit}
-            className="rounded border-2 border-blue-500 bg-white px-3 py-2 text-2xl font-normal text-slate-900 shadow-lg outline-none"
-            placeholder="Type text..."
-            style={{ minWidth: "200px" }}
-          />
-        </div>
-      )}
-    </div>
+
+        {showPopup && (
+            <SelectionPopup
+                position={popupPosition}
+                isSolving={isSolving}
+                isGraphing={isGraphing}
+                onDelete={handlePopupDelete}
+                onDuplicate={handlePopupDuplicate}
+                onChangeColor={handlePopupChangeColor}
+                onSolve={handlePopupSolve}
+                onAddToGraph={handlePopupAddToGraph}
+                onClose={handlePopupClose}
+            />
+        )}
+
+        {textInput && (
+            <div
+                className="absolute z-50"
+                style={{
+                  left: textInput.x,
+                  top: textInput.y,
+                  transform: "translateY(-50%)",
+                }}
+            >
+              <input
+                  type="text"
+                  autoFocus
+                  value={textValue}
+                  onChange={(e) => setTextValue(e.target.value)}
+                  onKeyDown={handleTextKeyDown}
+                  onBlur={handleTextSubmit}
+                  className="rounded border-2 border-blue-500 bg-white px-3 py-2 text-2xl font-normal text-slate-900 shadow-lg outline-none"
+                  placeholder="Type text..."
+                  style={{ minWidth: "200px" }}
+              />
+            </div>
+        )}
+      </div>
   );
 }

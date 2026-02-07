@@ -68,6 +68,7 @@ export default function App(): JSX.Element {
     }
     return notes.find((note) => note.id === selectedNoteId) ?? null;
   }, [notes, selectedNoteId]);
+  const showPhoneSidebarScreen = isPhone && !sidebarCollapsed;
   const saveTimerRef = useRef<number | null>(null);
 
   const handleCreateNote = useCallback(() => {
@@ -227,10 +228,8 @@ export default function App(): JSX.Element {
       <div className={`mx-auto grid h-full max-w-[1800px] grid-cols-1 gap-2 ${
         sidebarCollapsed ? "md:grid-cols-1" : "md:grid-cols-[300px_1fr]"
       }`}>
-        {!sidebarCollapsed && (
-          <div
-            className={`relative h-full ${isPhone ? "fixed inset-0 z-[70] bg-panel" : ""}`}
-          >
+        {!isPhone && !sidebarCollapsed && (
+          <div className="relative h-full">
             <Sidebar
               notes={notes}
               selectedNoteId={selectedNote?.id ?? null}
@@ -250,11 +249,31 @@ export default function App(): JSX.Element {
             />
           </div>
         )}
+
+        {showPhoneSidebarScreen && (
+          <div className="fixed inset-0 z-[95] bg-panel">
+            <Sidebar
+              notes={notes}
+              selectedNoteId={selectedNote?.id ?? null}
+              searchQuery={searchQuery}
+              isCollapsed={false}
+              onSearch={setSearchQuery}
+              onSelect={(id) => {
+                selectNote(id);
+                setSidebarCollapsed(true);
+              }}
+              onCreate={handleCreateNote}
+              onRename={renameNote}
+              onDelete={deleteNote}
+              onToggleCollapse={() => setSidebarCollapsed(true)}
+            />
+          </div>
+        )}
         
         {isPhone ? (
           <button
             onClick={() => setSidebarCollapsed((prev) => !prev)}
-            className="fixed left-0 top-1/2 z-[90] flex h-16 w-7 -translate-y-1/2 items-center justify-center rounded-r-2xl border border-l-0 border-slate-200 bg-panel text-slate-500 shadow-soft transition-all duration-200 hover:w-8 hover:bg-slate-50 hover:text-slate-700"
+            className="fixed left-0 top-1/2 z-[100] flex h-16 w-7 -translate-y-1/2 items-center justify-center rounded-r-2xl border border-l-0 border-slate-200 bg-panel text-slate-500 shadow-soft transition-all duration-200 hover:w-8 hover:bg-slate-50 hover:text-slate-700"
             title={sidebarCollapsed ? "Open notes" : "Close notes"}
             type="button"
           >
@@ -273,48 +292,50 @@ export default function App(): JSX.Element {
           </button>
         )}
 
-        <div className="relative h-full min-h-0 min-w-0">
-          <NoteEditor
-            note={selectedNote}
-            tool={tool}
-            color={color}
-            penSize={penSize}
-            highlighterSize={highlighterSize}
-            showGrid={showGrid}
-            showTextPanel={showTextPanel}
-            onTextChange={updateNoteText}
-            onToolChange={setTool}
-            onColorChange={setColor}
-            onPenSizeChange={setPenSize}
-            onHighlighterSizeChange={setHighlighterSize}
-            onShowGridChange={setShowGrid}
-            onShowTextPanelChange={setShowTextPanel}
-            onAppendStroke={appendStroke}
-            onEraseAt={eraseAt}
-            onDeleteStrokes={deleteStrokes}
-            onMoveStrokes={moveStrokes}
-            onDuplicateStrokes={duplicateStrokes}
-            onChangeStrokesColor={changeStrokesColor}
-            onAddTextAnnotation={addTextAnnotation}
-            onAddImage={addImage}
-            onDeleteImages={deleteImages}
-            onMoveImages={moveImages}
-            onScaleStrokes={scaleStrokes}
-            onScaleImages={scaleImages}
-            onPanViewport={panViewport}
-            onZoomViewportAt={zoomViewportAt}
-            onResetViewport={resetViewport}
-            onUndo={undoInk}
-            onRedo={redoInk}
-            onClear={clearInk}
-            onImportBundle={importBundle}
-          />
-          {isPending ? (
-            <div className="pointer-events-none absolute right-3 top-3 rounded-md bg-slate-900/85 px-2 py-1 text-xs font-medium text-white">
-              Updating
-            </div>
-          ) : null}
-        </div>
+        {!showPhoneSidebarScreen && (
+          <div className="relative h-full min-h-0 min-w-0">
+            <NoteEditor
+              note={selectedNote}
+              tool={tool}
+              color={color}
+              penSize={penSize}
+              highlighterSize={highlighterSize}
+              showGrid={showGrid}
+              showTextPanel={showTextPanel}
+              onTextChange={updateNoteText}
+              onToolChange={setTool}
+              onColorChange={setColor}
+              onPenSizeChange={setPenSize}
+              onHighlighterSizeChange={setHighlighterSize}
+              onShowGridChange={setShowGrid}
+              onShowTextPanelChange={setShowTextPanel}
+              onAppendStroke={appendStroke}
+              onEraseAt={eraseAt}
+              onDeleteStrokes={deleteStrokes}
+              onMoveStrokes={moveStrokes}
+              onDuplicateStrokes={duplicateStrokes}
+              onChangeStrokesColor={changeStrokesColor}
+              onAddTextAnnotation={addTextAnnotation}
+              onAddImage={addImage}
+              onDeleteImages={deleteImages}
+              onMoveImages={moveImages}
+              onScaleStrokes={scaleStrokes}
+              onScaleImages={scaleImages}
+              onPanViewport={panViewport}
+              onZoomViewportAt={zoomViewportAt}
+              onResetViewport={resetViewport}
+              onUndo={undoInk}
+              onRedo={redoInk}
+              onClear={clearInk}
+              onImportBundle={importBundle}
+            />
+            {isPending ? (
+              <div className="pointer-events-none absolute right-3 top-3 rounded-md bg-slate-900/85 px-2 py-1 text-xs font-medium text-white">
+                Updating
+              </div>
+            ) : null}
+          </div>
+        )}
       </div>
     </div>
   );
