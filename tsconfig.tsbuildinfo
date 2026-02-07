@@ -1,0 +1,1 @@
+{"root":["./src/app.tsx","./src/index.ts","./src/main.tsx","./src/types.ts","./src/components/inkcanvas.tsx","./src/components/noteeditor.tsx","./src/components/sidebar.tsx","./src/components/texteditor.tsx","./src/components/toolbar.tsx","./src/db/database.ts","./src/store/notestore.ts","./src/utils/ink.ts"],"version":"5.9.3"}

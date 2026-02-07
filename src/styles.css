@@ -1,0 +1,226 @@
+:root {
+  font-family: "Segoe UI", "SF Pro Text", "Helvetica Neue", sans-serif;
+  color: #0f172a;
+  background: linear-gradient(180deg, #e2e8f0 0%, #f8fafc 100%);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  margin: 0;
+  width: 100%;
+  height: 100%;
+}
+
+.app-shell {
+  display: grid;
+  grid-template-columns: 280px 1fr;
+  height: 100%;
+  gap: 12px;
+  padding: 12px;
+}
+
+.sidebar {
+  border: 1px solid #cbd5e1;
+  border-radius: 12px;
+  background: #ffffff;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.sidebar-top {
+  padding: 12px;
+  display: grid;
+  gap: 8px;
+}
+
+.primary-btn,
+.tool-btn,
+.ghost-btn,
+.tab-btn,
+.file-btn {
+  border: 1px solid #94a3b8;
+  border-radius: 8px;
+  background: #f8fafc;
+  color: #0f172a;
+  cursor: pointer;
+  padding: 8px 10px;
+  font-weight: 600;
+}
+
+.primary-btn {
+  background: #0f172a;
+  color: #ffffff;
+  border-color: #0f172a;
+}
+
+.search-input,
+.note-title-input,
+.editor-title,
+.markdown-input {
+  width: 100%;
+  border-radius: 8px;
+  border: 1px solid #cbd5e1;
+  padding: 10px;
+  font: inherit;
+}
+
+.note-list {
+  overflow: auto;
+  padding: 4px 8px 10px;
+}
+
+.note-list-item {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  align-items: center;
+  gap: 6px;
+  padding: 6px;
+  border-radius: 8px;
+}
+
+.note-list-item.selected {
+  background: #e2e8f0;
+}
+
+.note-title-btn {
+  border: 0;
+  background: transparent;
+  text-align: left;
+  font: inherit;
+  cursor: pointer;
+  padding: 6px;
+}
+
+.ghost-btn {
+  background: transparent;
+  border-color: transparent;
+  font-weight: 500;
+  color: #475569;
+}
+
+.editor {
+  border: 1px solid #cbd5e1;
+  border-radius: 12px;
+  background: #ffffff;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.editor.empty {
+  justify-content: center;
+  align-items: center;
+}
+
+.editor-head {
+  padding: 12px;
+  border-bottom: 1px solid #e2e8f0;
+  display: grid;
+  gap: 10px;
+}
+
+.tab-row {
+  display: flex;
+  gap: 8px;
+}
+
+.tab-btn.active,
+.tool-btn.active {
+  background: #0f172a;
+  color: #ffffff;
+  border-color: #0f172a;
+}
+
+.toolbar {
+  padding: 10px 12px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  border-bottom: 1px solid #e2e8f0;
+}
+
+.tool-group {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.inline-label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.9rem;
+}
+
+.zoom-label {
+  min-width: 56px;
+  text-align: center;
+  font-weight: 700;
+  color: #1e293b;
+}
+
+.file-btn {
+  position: relative;
+  overflow: hidden;
+}
+
+.file-btn input {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  cursor: pointer;
+}
+
+.ink-canvas-wrap {
+  flex: 1;
+  min-height: 320px;
+  position: relative;
+}
+
+.ink-canvas {
+  width: 100%;
+  height: 100%;
+  touch-action: none;
+  display: block;
+  border-bottom-left-radius: 12px;
+  border-bottom-right-radius: 12px;
+  cursor: crosshair;
+}
+
+.text-editor {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+}
+
+.text-editor-top {
+  padding: 10px 12px;
+  border-bottom: 1px solid #e2e8f0;
+}
+
+.markdown-input {
+  flex: 1;
+  border: 0;
+  border-radius: 0;
+  resize: none;
+  min-height: 0;
+}
+
+.markdown-preview {
+  padding: 16px;
+  overflow: auto;
+}
+
+@media (max-width: 960px) {
+  .app-shell {
+    grid-template-columns: 1fr;
+    grid-template-rows: 240px 1fr;
+  }
+}
