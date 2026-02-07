@@ -1,86 +1,36 @@
-# Derive AI Notebook - Backend Setup
+# Derive AI Notebook - Backend
 
-This is the backend server for the Derive AI Notebook application. It provides a REST API to store and manage notes using MongoDB.
+Node.js + Express + MongoDB backend for the Derive AI Notebook application.
 
 ## Prerequisites
 
-Before running the server, make sure you have:
-
 - **Node.js** (v18 or higher)
-- **MongoDB** installed and running locally, or a MongoDB connection string
+- **MongoDB Atlas** account (cloud database) or local MongoDB
 
-## Installation
+## Quick Start
 
-1. Install dependencies:
+1. **Install dependencies**:
 
 ```bash
 cd server
 npm install
 ```
 
-2. Set up environment variables:
+2. **The MongoDB connection is already configured** with MongoDB Atlas in `.env`. To use your own database, update the connection string:
 
-```bash
-cp .env.example .env
-```
-
-Edit `.env` and update the MongoDB connection string if needed:
-
-```
+```env
 PORT=3001
-MONGODB_URI=mongodb://localhost:27017/derive-ai
+MONGODB_URI=mongodb+srv://username:password@cluster.mongodb.net/derive-ai
 NODE_ENV=development
 ```
 
-## MongoDB Setup
-
-### Option 1: Local MongoDB
-
-If you have MongoDB installed locally, start it:
-
-```bash
-# macOS (with Homebrew)
-brew services start mongodb-community
-
-# Or run it directly
-mongod --dbpath /path/to/your/data/directory
-```
-
-### Option 2: MongoDB Atlas (Cloud)
-
-1. Create a free account at [MongoDB Atlas](https://www.mongodb.com/cloud/atlas)
-2. Create a new cluster
-3. Get your connection string and update `MONGODB_URI` in `.env`
-
-Example Atlas connection string:
-```
-MONGODB_URI=mongodb+srv://username:password@cluster0.xxxxx.mongodb.net/derive-ai?retryWrites=true&w=majority
-```
-
-### Option 3: Docker
-
-Run MongoDB in a Docker container:
-
-```bash
-docker run -d -p 27017:27017 --name mongodb mongo:latest
-```
-
-## Running the Server
-
-### Development Mode (with hot reload)
+3. **Start the server**:
 
 ```bash
 npm run dev
 ```
 
-### Production Mode
-
-```bash
-npm run build
-npm start
-```
-
-The server will start on `http://localhost:3001` (or the port specified in `.env`).
+The server runs on `http://localhost:3001`.
 
 ## API Endpoints
 
@@ -141,12 +91,12 @@ server/
 
 ### MongoDB Connection Issues
 
-If you can't connect to MongoDB:
+If you can't connect to MongoDB Atlas:
 
-1. Check if MongoDB is running: `ps aux | grep mongod`
-2. Verify the connection string in `.env`
-3. Check MongoDB logs for errors
-4. Ensure the port 27017 is not blocked
+1. Verify the connection string in `.env`
+2. Check that your IP is whitelisted in MongoDB Atlas Network Access
+3. Verify your database user credentials
+4. Check MongoDB Atlas dashboard for cluster status
 
 ### Port Already in Use
 
@@ -157,10 +107,8 @@ If port 3001 is already in use:
 
 ### CORS Issues
 
-If you're getting CORS errors:
-
-1. The server is configured to allow all origins in development
-2. For production, update the CORS settings in `src/index.ts`
+The server is configured to allow all origins in development.
+For production, update the CORS settings in `src/index.ts`.
 
 ## License
 

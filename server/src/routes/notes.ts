@@ -114,13 +114,18 @@ router.post("/bulk", async (req: Request, res: Response) => {
     }
     
     // Use bulk operations for better performance
-    const bulkOps = notes.map(note => ({
-      updateOne: {
-        filter: { id: note.id },
-        update: { $set: note },
-        upsert: true
-      }
-    }));
+    const bulkOps = notes.map(note => {
+      // Remove _id from the note to avoid MongoDB immutable field error
+      const { _id, ...noteWithoutId } = note as any;
+      
+      return {
+        updateOne: {
+          filter: { id: note.id },
+          update: { $set: noteWithoutId },
+          upsert: true
+        }
+      };
+    });
     
     if (bulkOps.length > 0) {
       await getNotesCollection().bulkWrite(bulkOps);

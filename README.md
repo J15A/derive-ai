@@ -1,8 +1,8 @@
 # Derive AI Notebook
 
-**📚 Documentation**: See [DOCS.md](./DOCS.md) for complete documentation index.
+**🚀 Quick Start**: See [GETTING_STARTED.md](./GETTING_STARTED.md) to get up and running in 2 minutes!
 
-Pen-first note taking app built with React 18 + TypeScript + Vite + Tailwind CSS + MongoDB.
+Pen-first note taking app built with React 18 + TypeScript + Vite + Tailwind CSS with MongoDB backend.
 
 ## Features
 
@@ -26,43 +26,41 @@ Pen-first note taking app built with React 18 + TypeScript + Vite + Tailwind CSS
 
 ## Setup
 
-**Quick Start**: See [QUICKSTART.md](./QUICKSTART.md) for step-by-step setup instructions.
-
-**Docker Setup**: See [DOCKER.md](./DOCKER.md) for Docker-based MongoDB setup.
-
 ### Prerequisites
 
 - Node.js (v18 or higher)
-- MongoDB (local or cloud)
+- MongoDB Atlas account (or local MongoDB)
 
 ### Backend Setup
 
-1. **Install and start MongoDB**:
-
-```bash
-# macOS (with Homebrew)
-brew services start mongodb-community
-
-# Or use Docker
-docker run -d -p 27017:27017 --name mongodb mongo:latest
-```
-
-2. **Install and run the server**:
+1. **Install backend dependencies**:
 
 ```bash
 cd server
 npm install
-cp .env.example .env
+```
+
+2. **Configure MongoDB connection**:
+
+The `.env` file is already configured with MongoDB Atlas. To use your own database, update `server/.env`:
+
+```env
+PORT=3001
+MONGODB_URI=your-mongodb-connection-string
+NODE_ENV=development
+```
+
+3. **Start the backend server**:
+
+```bash
 npm run dev
 ```
 
 The server will start on `http://localhost:3001`.
 
-See [server/README.md](./server/README.md) for detailed backend setup instructions.
-
 ### Frontend Setup
 
-1. **Install dependencies**:
+1. **Install frontend dependencies** (from project root):
 
 ```bash
 npm install
@@ -70,22 +68,33 @@ npm install
 
 2. **Configure API endpoint**:
 
-```bash
-cp .env.example .env
-```
-
-The `.env` file should contain:
-```
+Create a `.env` file in the project root:
+```env
 VITE_API_URL=http://localhost:3001/api
 ```
 
-3. **Run the development server**:
+3. **Start the frontend**:
 
 ```bash
 npm run dev
 ```
 
-Build for production:
+### Quick Start - Run Everything
+
+```bash
+# Terminal 1 - Backend
+cd server && npm run dev
+
+# Terminal 2 - Frontend
+npm run dev
+```
+
+Or use the combined command:
+```bash
+npm run dev:all
+```
+
+### Build for Production
 
 ```bash
 npm run build
@@ -193,9 +202,17 @@ Edit `src/utils/ink.ts` in `strokePolygon()`:
 - `streamline`: input stabilization
 - `simulatePressure`: synthetic pressure toggle (currently `false`)
 
-## Real-time Collaboration (Future)
+## API Endpoints
 
-**Architecture**: See [ARCHITECTURE.md](./ARCHITECTURE.md) for detailed system architecture and data flow diagrams.
+- `GET /api/notes` - Fetch all notes
+- `GET /api/notes/:id` - Fetch specific note
+- `POST /api/notes` - Create new note
+- `PUT /api/notes/:id` - Update note
+- `DELETE /api/notes/:id` - Delete note
+- `POST /api/notes/bulk` - Bulk save/update notes
+- `GET /health` - Health check
+
+## Real-time Collaboration (Future)
 
 Use Yjs:
 
