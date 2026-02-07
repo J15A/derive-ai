@@ -34,6 +34,7 @@ export function InkCanvas({
   const rafRef = useRef<number | null>(null);
   const dprRef = useRef(1);
   const drawingPointerId = useRef<number | null>(null);
+  const isDrawingRef = useRef(false);
   const panPointerId = useRef<number | null>(null);
   const currentPointsRef = useRef<InkPoint[]>([]);
   const lastPanRef = useRef<{ x: number; y: number } | null>(null);
@@ -88,10 +89,30 @@ export function InkCanvas({
     ctx.scale(note.viewport.scale, note.viewport.scale);
 
     for (const stroke of note.strokes) {
-      drawStrokePolygon(ctx, strokePolygon(stroke), stroke.color, 0, 0);
+      const polygon = strokePolygon(stroke);
+      if (polygon.length >= 2) {
+        drawStrokePolygon(ctx, polygon, stroke.color, 0, 0);
+        continue;
+      }
+      const point = stroke.points[stroke.points.length - 1];
+      if (!point) {
+        continue;
+      }
+      const radius = Math.max(0.5, (stroke.baseSize * Math.max(0.1, point.pressure)) / 2);
+      ctx.beginPath();
+      ctx.arc(point.x, point.y, radius, 0, Math.PI * 2);
+      ctx.fillStyle = stroke.color;
+      ctx.fill();
     }
 
-    if (currentPointsRef.current.length > 1 && tool === "pen") {
+    if (currentPointsRef.current.length === 1 && tool === "pen") {
+      const point = currentPointsRef.current[0];
+      const radius = Math.max(0.5, (size * Math.max(0.1, point.pressure)) / 2);
+      ctx.beginPath();
+      ctx.arc(point.x, point.y, radius, 0, Math.PI * 2);
+      ctx.fillStyle = color;
+      ctx.fill();
+    } else if (currentPointsRef.current.length > 1 && tool === "pen") {
       const tempStroke: InkStroke = {
         id: "temp",
         tool: "pen",
@@ -99,7 +120,19 @@ export function InkCanvas({
         baseSize: size,
         points: currentPointsRef.current,
       };
-      drawStrokePolygon(ctx, strokePolygon(tempStroke), tempStroke.color, 0, 0);
+      const polygon = strokePolygon(tempStroke);
+      if (polygon.length >= 2) {
+        drawStrokePolygon(ctx, polygon, tempStroke.color, 0, 0);
+      } else {
+        const point = tempStroke.points[tempStroke.points.length - 1];
+        if (point) {
+          const radius = Math.max(0.5, (size * Math.max(0.1, point.pressure)) / 2);
+          ctx.beginPath();
+          ctx.arc(point.x, point.y, radius, 0, Math.PI * 2);
+          ctx.fillStyle = color;
+          ctx.fill();
+        }
+      }
     }
 
     ctx.restore();
@@ -128,17 +161,25 @@ export function InkCanvas({
       dprRef.current = dpr;
       canvas.width = Math.floor(rect.width * dpr);
       canvas.height = Math.floor(rect.height * dpr);
-      canvas.style.width = `${rect.width}px`;
-      canvas.style.height = `${rect.height}px`;
       drawScene();
+    };
+
+    const handleViewportChange = () => {
+      resize();
+      requestAnimationFrame(resize);
+      window.setTimeout(resize, 60);
     };
 
     resize();
     const observer = new ResizeObserver(resize);
     observer.observe(container);
+    window.addEventListener("resize", handleViewportChange);
+    document.addEventListener("fullscreenchange", handleViewportChange);
 
     return () => {
       observer.disconnect();
+      window.removeEventListener("resize", handleViewportChange);
+      document.removeEventListener("fullscreenchange", handleViewportChange);
     };
   }, [drawScene]);
 
@@ -183,7 +224,8 @@ export function InkCanvas({
   const pushPointerEvent = useCallback(
     (event: PointerEvent | React.PointerEvent<HTMLCanvasElement>) => {
       const coalesced = "getCoalescedEvents" in event ? event.getCoalescedEvents() : [event];
-      for (const e of coalesced) {
+      const samples = coalesced.length > 0 ? coalesced : [event];
+      for (const e of samples) {
         const world = toWorldPoint(e.clientX, e.clientY);
         currentPointsRef.current.push({
           x: world.x,
@@ -197,7 +239,40 @@ export function InkCanvas({
     [scheduleDraw, toWorldPoint],
   );
 
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) {
+      return;
+    }
+
+    const handlePointerRawUpdate = (event: Event) => {
+      if (tool !== "pen" || !(event instanceof PointerEvent)) {
+        return;
+      }
+      if (!isDrawingRef.current || drawingPointerId.current !== event.pointerId) {
+        return;
+      }
+
+      pushPointerEvent(event);
+      drawScene();
+    };
+
+    canvas.addEventListener("pointerrawupdate", handlePointerRawUpdate);
+    return () => {
+      canvas.removeEventListener("pointerrawupdate", handlePointerRawUpdate);
+    };
+  }, [drawScene, pushPointerEvent, tool]);
+
   const finishStroke = useCallback(() => {
+    if (currentPointsRef.current.length === 1) {
+      const firstPoint = currentPointsRef.current[0];
+      currentPointsRef.current.push({
+        ...firstPoint,
+        x: firstPoint.x + 0.01,
+        timestamp: performance.now(),
+      });
+    }
+
     if (currentPointsRef.current.length < 2) {
       currentPointsRef.current = [];
       scheduleDraw();
@@ -235,6 +310,7 @@ export function InkCanvas({
     }
 
     if (tool === "eraser") {
+      isDrawingRef.current = true;
       drawingPointerId.current = e.pointerId;
       canvas.setPointerCapture(e.pointerId);
       const point = toWorldPoint(e.clientX, e.clientY);
@@ -242,12 +318,14 @@ export function InkCanvas({
       return;
     }
 
+    isDrawingRef.current = true;
     drawingPointerId.current = e.pointerId;
     currentPointsRef.current = [];
 
     // Capture pointer so stroke continues outside canvas bounds.
     canvas.setPointerCapture(e.pointerId);
     pushPointerEvent(e);
+    drawScene();
   };
 
   const handlePointerMove = (e: React.PointerEvent<HTMLCanvasElement>) => {
@@ -264,8 +342,14 @@ export function InkCanvas({
       return;
     }
 
-    if (drawingPointerId.current !== e.pointerId) {
+    const matchesPointer = drawingPointerId.current === e.pointerId;
+    const hasPrimaryButtonDown = (e.buttons & 1) === 1;
+    const drawByButtonFallback = isDrawingRef.current && hasPrimaryButtonDown;
+    if (!matchesPointer && !drawByButtonFallback) {
       return;
+    }
+    if (!matchesPointer && drawByButtonFallback) {
+      drawingPointerId.current = e.pointerId;
     }
 
     e.preventDefault();
@@ -278,6 +362,7 @@ export function InkCanvas({
 
     // Coalesced events improve ink quality on high-frequency pen sampling.
     pushPointerEvent(e);
+    drawScene();
   };
 
   const handlePointerUp = (e: React.PointerEvent<HTMLCanvasElement>) => {
@@ -293,12 +378,15 @@ export function InkCanvas({
       return;
     }
 
-    if (drawingPointerId.current === e.pointerId) {
+    if (isDrawingRef.current) {
       if (tool === "pen") {
         finishStroke();
       }
+      isDrawingRef.current = false;
       drawingPointerId.current = null;
-      canvas.releasePointerCapture(e.pointerId);
+      if (canvas.hasPointerCapture(e.pointerId)) {
+        canvas.releasePointerCapture(e.pointerId);
+      }
     }
   };
 

@@ -23,7 +23,6 @@ interface NoteState {
   selectedNoteId: string | null;
   searchQuery: string;
   activeTab: "ink" | "text";
-  textPreview: boolean;
   tool: InkTool;
   color: string;
   size: number;
@@ -38,7 +37,6 @@ interface NoteState {
   deleteNote: (id: string) => void;
   setSearchQuery: (query: string) => void;
   setActiveTab: (tab: "ink" | "text") => void;
-  setTextPreview: (value: boolean) => void;
   updateNoteTitle: (title: string) => void;
   updateNoteText: (text: string) => void;
   setTool: (tool: InkTool) => void;
@@ -65,7 +63,6 @@ export const useNoteStore = create<NoteState>((set, get) => ({
   selectedNoteId: null,
   searchQuery: "",
   activeTab: "ink",
-  textPreview: false,
   tool: "pen",
   color: "#111827",
   size: 6,
@@ -122,7 +119,6 @@ export const useNoteStore = create<NoteState>((set, get) => ({
   },
   setSearchQuery: (query) => set({ searchQuery: query }),
   setActiveTab: (tab) => set({ activeTab: tab }),
-  setTextPreview: (value) => set({ textPreview: value }),
   updateNoteTitle: (title) => {
     const selectedId = get().selectedNoteId;
     if (!selectedId) {

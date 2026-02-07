@@ -1,3 +1,4 @@
+import { useEffect, useRef } from "react";
 import type { InkTool } from "../types";
 
 interface ToolbarProps {
@@ -49,6 +50,33 @@ export function Toolbar({
   onExportBundle,
   onImportBundle,
 }: ToolbarProps): JSX.Element {
+  const settingsRef = useRef<HTMLDetailsElement | null>(null);
+
+  useEffect(() => {
+    const handlePointerDown = (event: PointerEvent) => {
+      const settings = settingsRef.current;
+      if (!settings?.open) {
+        return;
+      }
+      if (event.target instanceof Node && !settings.contains(event.target)) {
+        settings.open = false;
+      }
+    };
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape" && settingsRef.current?.open) {
+        settingsRef.current.open = false;
+      }
+    };
+
+    window.addEventListener("pointerdown", handlePointerDown);
+    window.addEventListener("keydown", handleKeyDown);
+    return () => {
+      window.removeEventListener("pointerdown", handlePointerDown);
+      window.removeEventListener("keydown", handleKeyDown);
+    };
+  }, []);
+
   const toolButton = (name: InkTool, label: string) => (
     <button
       className={`btn h-9 min-w-20 ${tool === name ? "btn-active" : ""}`}
@@ -60,15 +88,15 @@ export function Toolbar({
   );
 
   return (
-    <div className="flex items-center gap-2 border-b border-slate-100 p-3">
-      <div className="flex items-center gap-2">{toolButton("pen", "Pen")}{toolButton("eraser", "Eraser")}{toolButton("pan", "Pan")}</div>
+    <div className="flex min-w-0 items-center gap-2 border-b border-slate-100 p-3">
+      <div className="flex min-w-0 items-center gap-2">{toolButton("pen", "Pen")}{toolButton("eraser", "Eraser")}{toolButton("pan", "Pan")}</div>
 
       <span className="ml-auto w-14 text-center text-sm font-semibold text-slate-700">{zoomPercent}%</span>
       <button className={`btn h-9 ${isFullscreen ? "btn-active" : ""}`} type="button" onClick={onToggleFullscreen}>
         {isFullscreen ? "Exit Full" : "Full"}
       </button>
 
-      <details className="group relative">
+      <details className="group relative" ref={settingsRef}>
         <summary className="btn h-9 list-none select-none">Settings</summary>
 
         <div className="absolute right-0 top-11 z-30 w-[320px] space-y-3 rounded-xl border border-slate-200 bg-white p-3 shadow-2xl">

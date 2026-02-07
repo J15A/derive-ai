@@ -8,14 +8,12 @@ import { Toolbar } from "./Toolbar";
 
 interface NoteEditorProps {
   note: Note | null;
-  textPreview: boolean;
   tool: "pen" | "eraser" | "pan";
   color: string;
   size: number;
   showGrid: boolean;
   showTextPanel: boolean;
   onTextChange: (value: string) => void;
-  onTogglePreview: () => void;
   onToolChange: (tool: "pen" | "eraser" | "pan") => void;
   onColorChange: (value: string) => void;
   onSizeChange: (value: number) => void;
@@ -44,14 +42,12 @@ function download(name: string, content: string, mimeType: string): void {
 
 export function NoteEditor({
   note,
-  textPreview,
   tool,
   color,
   size,
   showGrid,
   showTextPanel,
   onTextChange,
-  onTogglePreview,
   onToolChange,
   onColorChange,
   onSizeChange,
@@ -128,7 +124,7 @@ export function NoteEditor({
   };
 
   return (
-    <main className="flex h-full min-h-0 flex-col overflow-hidden rounded-2xl border border-slate-200 bg-panel shadow-soft" ref={rootRef}>
+    <main className="flex h-full min-h-0 min-w-0 flex-col overflow-hidden rounded-2xl border border-slate-200 bg-panel shadow-soft" ref={rootRef}>
       <Toolbar
         tool={tool}
         color={color}
@@ -164,7 +160,7 @@ export function NoteEditor({
         }}
       />
 
-      <div className="relative min-h-0 flex-1">
+      <div className="relative min-h-0 min-w-0 flex-1">
         <InkCanvas
           note={safeNote}
           tool={tool}
@@ -178,12 +174,11 @@ export function NoteEditor({
         />
 
         {showTextPanel ? (
-          <section className="absolute bottom-3 right-3 top-3 z-20 w-[420px] max-w-[calc(100%-1.5rem)] overflow-hidden rounded-xl border border-slate-200 bg-white shadow-2xl max-md:left-3 max-md:w-auto">
+          <section className="absolute bottom-3 right-3 top-3 z-20 flex min-h-0 w-[420px] max-w-[calc(100%-1.5rem)] flex-col overflow-hidden rounded-xl border border-slate-200 bg-white shadow-2xl max-md:left-3 max-md:w-auto">
             <TextEditor
               text={safeNote.text}
-              preview={textPreview}
               onTextChange={onTextChange}
-              onTogglePreview={onTogglePreview}
+              onClose={() => onShowTextPanelChange(false)}
             />
           </section>
         ) : null}
