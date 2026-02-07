@@ -25,6 +25,7 @@ export default function App(): JSX.Element {
     createNote,
     renameNote,
     deleteNote,
+    reorderNotes,
     setSearchQuery,
     updateNoteText,
     setTool,
@@ -258,6 +259,7 @@ export default function App(): JSX.Element {
               onCreate={handleCreateNote}
               onRename={renameNote}
               onDelete={deleteNote}
+              onReorder={reorderNotes}
               onToggleCollapse={() => setSidebarCollapsed(!sidebarCollapsed)}
             />
           </div>
@@ -278,6 +280,7 @@ export default function App(): JSX.Element {
               onCreate={handleCreateNote}
               onRename={renameNote}
               onDelete={deleteNote}
+              onReorder={reorderNotes}
               onToggleCollapse={() => setSidebarCollapsed(true)}
             />
           </div>

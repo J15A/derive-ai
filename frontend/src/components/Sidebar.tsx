@@ -12,6 +12,7 @@ interface SidebarProps {
   onCreate: () => void;
   onRename: (id: string, title: string) => void;
   onDelete: (id: string) => void;
+  onReorder: (fromIndex: number, toIndex: number) => void;
   onToggleCollapse: () => void;
 }
 
@@ -25,9 +26,13 @@ function SidebarImpl({
   onCreate,
   onRename,
   onDelete,
+  onReorder,
   onToggleCollapse,
 }: SidebarProps): JSX.Element | null {
   const [editingId, setEditingId] = useState<string | null>(null);
+  const [draggedIndex, setDraggedIndex] = useState<number | null>(null);
+  const [dragOverIndex, setDragOverIndex] = useState<number | null>(null);
+  const [dropPosition, setDropPosition] = useState<"above" | "below">("below");
   const [isPending, startTransition] = useTransition();
   const deferredQuery = useDeferredValue(searchQuery);
   const searchId = useId();
@@ -75,15 +80,74 @@ function SidebarImpl({
       </div>
 
       <div className="min-h-0 flex-1 space-y-1 overflow-auto p-2 max-sm:space-y-2 max-sm:p-3">
-        {filtered.map((note) => {
+        {filtered.map((note, index) => {
           const isSelected = note.id === selectedNoteId;
           const isEditing = editingId === note.id;
+          const isDragging = draggedIndex === index;
+          const isDragOver = dragOverIndex === index;
 
           return (
             <div
               key={note.id}
-              className={`grid grid-cols-[1fr_auto] items-center gap-2 rounded-lg p-1 max-sm:p-2 ${
+              draggable={!isEditing && !searchQuery}
+              onDragStart={(e) => {
+                if (isEditing || searchQuery) return;
+                setDraggedIndex(index);
+                e.dataTransfer.effectAllowed = "move";
+              }}
+              onDragEnd={() => {
+                setDraggedIndex(null);
+                setDragOverIndex(null);
+                setDropPosition("below");
+              }}
+              onDragOver={(e) => {
+                if (draggedIndex === null || searchQuery) return;
+                e.preventDefault();
+                e.dataTransfer.dropEffect = "move";
+                setDragOverIndex(index);
+                
+                // Calculate if mouse is in top or bottom half
+                const rect = e.currentTarget.getBoundingClientRect();
+                const mouseY = e.clientY;
+                const relativeY = mouseY - rect.top;
+                const halfHeight = rect.height / 2;
+                
+                setDropPosition(relativeY < halfHeight ? "above" : "below");
+              }}
+              onDragLeave={() => {
+                setDragOverIndex(null);
+              }}
+              onDrop={(e) => {
+                e.preventDefault();
+                if (draggedIndex !== null && !searchQuery) {
+                  let targetIndex = index;
+                  
+                  // Adjust target index based on drop position
+                  if (dropPosition === "below") {
+                    targetIndex = index + 1;
+                  }
+                  
+                  // Adjust if dragging from above
+                  if (draggedIndex < targetIndex) {
+                    targetIndex--;
+                  }
+                  
+                  if (draggedIndex !== targetIndex) {
+                    onReorder(draggedIndex, targetIndex);
+                  }
+                }
+                setDraggedIndex(null);
+                setDragOverIndex(null);
+                setDropPosition("below");
+              }}
+              className={`relative grid grid-cols-[1fr_auto] items-center gap-2 rounded-lg p-1 max-sm:p-2 transition-all ${
                 isSelected ? "bg-slate-100 ring-1 ring-slate-200" : "hover:bg-slate-50"
+              } ${
+                isDragging ? "opacity-50 cursor-grabbing" : searchQuery ? "" : "cursor-grab"
+              } ${
+                isDragOver && draggedIndex !== index && dropPosition === "above" ? "before:absolute before:top-0 before:left-0 before:right-0 before:h-0.5 before:bg-blue-500 before:rounded" : ""
+              } ${
+                isDragOver && draggedIndex !== index && dropPosition === "below" ? "after:absolute after:bottom-0 after:left-0 after:right-0 after:h-0.5 after:bg-blue-500 after:rounded" : ""
               }`}
             >
               {isEditing ? (

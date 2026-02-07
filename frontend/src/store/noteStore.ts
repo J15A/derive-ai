@@ -40,6 +40,7 @@ interface NoteState {
   createNote: () => void;
   renameNote: (id: string, title: string) => void;
   deleteNote: (id: string) => void;
+  reorderNotes: (fromIndex: number, toIndex: number) => void;
   setSearchQuery: (query: string) => void;
   setActiveTab: (tab: "ink" | "text") => void;
   updateNoteTitle: (title: string) => void;
@@ -163,6 +164,14 @@ export const useNoteStore = create<NoteState>((set, get) => ({
       }
       const fallback = createNote();
       return { notes: [fallback], selectedNoteId: fallback.id };
+    });
+  },
+  reorderNotes: (fromIndex, toIndex) => {
+    set((state) => {
+      const newNotes = [...state.notes];
+      const [movedNote] = newNotes.splice(fromIndex, 1);
+      newNotes.splice(toIndex, 0, movedNote);
+      return { notes: newNotes };
     });
   },
   setSearchQuery: (query) => set({ searchQuery: query }),
