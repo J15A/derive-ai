@@ -1,6 +1,25 @@
 import { useEffect, useRef } from "react";
 import type { InkTool } from "../types";
-import { Pen, Eraser, Hand, SquareDashedMousePointer, Highlighter } from "lucide-react";
+import { 
+  Pen, 
+  Eraser, 
+  Hand, 
+  SquareDashedMousePointer, 
+  Highlighter,
+  Maximize,
+  Minimize,
+  Settings,
+  Grid3x3,
+  Type,
+  ZoomIn,
+  ZoomOut,
+  Focus,
+  Undo,
+  Redo,
+  Image,
+  Package,
+  Upload
+} from "lucide-react";
 import { useState } from "react";
 
 interface ToolbarProps {
@@ -68,7 +87,6 @@ export function Toolbar({
   onResetView,
   onUndo,
   onRedo,
-  onClear,
   onExportPng,
   onExportBundle,
   onImportBundle,
@@ -106,11 +124,7 @@ export function Toolbar({
 
   const toolButton = (name: InkTool, icon: JSX.Element) => (
     <button
-      className={`flex h-10 w-10 items-center justify-center rounded-full transition-colors ${
-        tool === name 
-          ? "bg-slate-700 text-white hover:bg-slate-600" 
-          : "text-slate-700 hover:bg-slate-200"
-      }`}
+      className={`tool-btn ${tool === name ? "tool-btn-active" : ""}`}
       type="button"
       onClick={() => onToolChange(name)}
       title={name.charAt(0).toUpperCase() + name.slice(1)}
@@ -141,11 +155,7 @@ export function Toolbar({
           onMouseLeave={() => setShowPenMenu(false)}
         >
           <button
-            className={`flex h-10 w-10 items-center justify-center rounded-full transition-colors ${
-              tool === "pen" 
-                ? "bg-slate-700 text-white hover:bg-slate-600" 
-                : "text-slate-700 hover:bg-slate-200"
-            }`}
+            className={`tool-btn ${tool === "pen" ? "tool-btn-active" : ""}`}
             type="button"
             onClick={() => {
               onColorChange(penColor);
@@ -203,11 +213,7 @@ export function Toolbar({
           onMouseLeave={() => setShowHighlighterMenu(false)}
         >
           <button
-            className={`flex h-10 w-10 items-center justify-center rounded-full transition-colors ${
-              tool === "highlighter" 
-                ? "bg-slate-700 text-white hover:bg-slate-600" 
-                : "text-slate-700 hover:bg-slate-200"
-            }`}
+            className={`tool-btn ${tool === "highlighter" ? "tool-btn-active" : ""}`}
             type="button"
             onClick={() => {
               onColorChange(highlighterColor);
@@ -253,57 +259,97 @@ export function Toolbar({
             </div>
           )}
         </div>
+        
+        <button 
+          className="tool-btn"
+          type="button" 
+          onClick={onUndo} 
+          title="Undo"
+        >
+          <Undo size={20} />
+        </button>
+        
+        <button 
+          className="tool-btn"
+          type="button" 
+          onClick={onRedo} 
+          title="Redo"
+        >
+          <Redo size={20} />
+        </button>
       </div>
 
-      <span className="ml-auto w-14 text-center text-sm font-semibold text-slate-700">{zoomPercent}%</span>
-      <button className={`btn h-9 ${isFullscreen ? "btn-active" : ""}`} type="button" onClick={onToggleFullscreen}>
-        {isFullscreen ? "Exit Full" : "Full"}
+      <div className="ml-auto flex items-center gap-2">
+        <button className="tool-btn" type="button" onClick={onZoomOut} title="Zoom Out">
+          <ZoomOut size={20} />
+        </button>
+        <button className="tool-btn" type="button" onClick={onZoomIn} title="Zoom In">
+          <ZoomIn size={20} />
+        </button>
+        <button className="tool-btn" type="button" onClick={onResetView} title="Reset View">
+          <Focus size={20} />
+        </button>
+        <button 
+          className={`tool-btn ${showGrid ? "tool-btn-active" : ""}`}
+          type="button" 
+          onClick={() => onShowGridChange(!showGrid)}
+          title="Toggle Grid"
+        >
+          <Grid3x3 size={20} />
+        </button>
+        <button 
+          className={`tool-btn ${showTextPanel ? "tool-btn-active" : ""}`}
+          type="button" 
+          onClick={() => onShowTextPanelChange(!showTextPanel)}
+          title="Toggle Text Panel"
+        >
+          <Type size={20} />
+        </button>
+      </div>
+
+      <span className="w-14 text-center text-sm font-semibold text-slate-700">{zoomPercent}%</span>
+      <button 
+        className={`tool-btn ${isFullscreen ? "tool-btn-active" : ""}`}
+        type="button" 
+        onClick={onToggleFullscreen}
+        title={isFullscreen ? "Exit Fullscreen" : "Fullscreen"}
+      >
+        {isFullscreen ? <Minimize size={20} /> : <Maximize size={20} />}
       </button>
 
       <details className="group relative" ref={settingsRef}>
-        <summary className="btn h-9 list-none select-none">Settings</summary>
+        <summary className="tool-btn cursor-pointer list-none">
+          <Settings size={20} />
+        </summary>
 
         <div className="absolute right-0 top-11 z-30 w-[320px] space-y-3 rounded-xl border border-slate-200 bg-white p-3 shadow-2xl">
-
-          <div className="grid grid-cols-2 gap-2">
-            <button className={`btn ${showGrid ? "btn-active" : ""}`} type="button" onClick={() => onShowGridChange(!showGrid)}>
-              Grid
-            </button>
-            <button className={`btn ${showTextPanel ? "btn-active" : ""}`} type="button" onClick={() => onShowTextPanelChange(!showTextPanel)}>
-              Text Panel
-            </button>
-          </div>
-
-          <div className="grid grid-cols-3 gap-2">
-            <button className="btn" type="button" onClick={onZoomOut}>Zoom -</button>
-            <button className="btn" type="button" onClick={onZoomIn}>Zoom +</button>
-            <button className="btn" type="button" onClick={onResetView}>Reset</button>
-          </div>
-
-          <div className="grid grid-cols-3 gap-2">
-            <button className="btn" type="button" onClick={onUndo}>Undo</button>
-            <button className="btn" type="button" onClick={onRedo}>Redo</button>
-            <button className="btn" type="button" onClick={onClear}>Clear</button>
-          </div>
-
-          <div className="grid grid-cols-3 gap-2">
-            <button className="btn" type="button" onClick={onExportPng}>PNG</button>
-            <button className="btn" type="button" onClick={onExportBundle}>Bundle</button>
-            <label className="btn relative cursor-pointer overflow-hidden">
-              Import
-              <input
-                type="file"
-                accept="application/json"
-                className="absolute inset-0 cursor-pointer opacity-0"
-                onChange={(e) => {
-                  const file = e.target.files?.[0];
-                  if (file) {
-                    onImportBundle(file);
-                    e.currentTarget.value = "";
-                  }
-                }}
-              />
-            </label>
+          <div>
+            <div className="grid grid-cols-3 gap-2">
+              <button className="btn flex flex-col items-center justify-center gap-1" type="button" onClick={onExportPng} title="Export PNG">
+                <Image size={18} />
+                <span className="text-xs">PNG</span>
+              </button>
+              <button className="btn flex flex-col items-center justify-center gap-1" type="button" onClick={onExportBundle} title="Export Bundle">
+                <Package size={18} />
+                <span className="text-xs">Bundle</span>
+              </button>
+              <label className="btn relative flex cursor-pointer flex-col items-center justify-center gap-1 overflow-hidden" title="Import Bundle">
+                <Upload size={18} />
+                <span className="text-xs">Import</span>
+                <input
+                  type="file"
+                  accept="application/json"
+                  className="absolute inset-0 cursor-pointer opacity-0"
+                  onChange={(e) => {
+                    const file = e.target.files?.[0];
+                    if (file) {
+                      onImportBundle(file);
+                      e.currentTarget.value = "";
+                    }
+                  }}
+                />
+              </label>
+            </div>
           </div>
         </div>
       </details>

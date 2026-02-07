@@ -1,5 +1,5 @@
 import { memo, useDeferredValue, useId, useMemo, useState, useTransition } from "react";
-import { ChevronLeft } from "lucide-react";
+import { ChevronLeft, Trash2 } from "lucide-react";
 import type { Note } from "../types";
 
 interface SidebarProps {
@@ -115,7 +115,7 @@ function SidebarImpl({
 
               <button
                 type="button"
-                className="rounded-md px-2 py-1 text-xs font-medium text-slate-500 transition hover:bg-slate-200 hover:text-slate-700"
+                className="flex h-8 w-8 items-center justify-center rounded-md text-slate-500 transition hover:bg-slate-200 hover:text-red-600"
                 onClick={() => {
                   if (window.confirm("Delete this note?")) {
                     onDelete(note.id);
@@ -123,7 +123,7 @@ function SidebarImpl({
                 }}
                 title="Delete note"
               >
-                Delete
+                <Trash2 size={16} />
               </button>
             </div>
           );
