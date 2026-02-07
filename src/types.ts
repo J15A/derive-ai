@@ -1,4 +1,4 @@
-export type InkTool = "pen" | "eraser" | "pan";
+export type InkTool = "pen" | "eraser" | "pan" | "selector" | "highlighter";
 
 export interface InkPoint {
   x: number;
@@ -9,10 +9,19 @@ export interface InkPoint {
 
 export interface InkStroke {
   id: string;
-  tool: "pen";
+  tool: "pen" | "highlighter";
   color: string;
   baseSize: number;
   points: InkPoint[];
+}
+
+export interface Selection {
+  id: string;
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  strokeIds: string[];
 }
 
 export interface CanvasViewport {

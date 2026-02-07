@@ -23,7 +23,6 @@ interface NoteState {
   selectedNoteId: string | null;
   searchQuery: string;
   activeTab: "ink" | "text";
-  textPreview: boolean;
   tool: InkTool;
   color: string;
   size: number;
@@ -38,7 +37,6 @@ interface NoteState {
   deleteNote: (id: string) => void;
   setSearchQuery: (query: string) => void;
   setActiveTab: (tab: "ink" | "text") => void;
-  setTextPreview: (value: boolean) => void;
   updateNoteTitle: (title: string) => void;
   updateNoteText: (text: string) => void;
   setTool: (tool: InkTool) => void;
@@ -48,6 +46,8 @@ interface NoteState {
   setShowTextPanel: (show: boolean) => void;
   appendStroke: (noteId: string, stroke: InkStroke) => void;
   eraseAt: (noteId: string, x: number, y: number, radius: number) => void;
+  deleteStrokes: (noteId: string, strokeIds: string[]) => void;
+  moveStrokes: (noteId: string, strokeIds: string[], dx: number, dy: number) => void;
   undoInk: () => void;
   redoInk: () => void;
   clearInk: () => void;
@@ -65,7 +65,6 @@ export const useNoteStore = create<NoteState>((set, get) => ({
   selectedNoteId: null,
   searchQuery: "",
   activeTab: "ink",
-  textPreview: false,
   tool: "pen",
   color: "#111827",
   size: 6,
@@ -122,7 +121,6 @@ export const useNoteStore = create<NoteState>((set, get) => ({
   },
   setSearchQuery: (query) => set({ searchQuery: query }),
   setActiveTab: (tab) => set({ activeTab: tab }),
-  setTextPreview: (value) => set({ textPreview: value }),
   updateNoteTitle: (title) => {
     const selectedId = get().selectedNoteId;
     if (!selectedId) {
@@ -173,6 +171,52 @@ export const useNoteStore = create<NoteState>((set, get) => ({
         return {
           ...note,
           strokes: filtered,
+          undoneStrokes: [],
+          updatedAt: now(),
+        };
+      }),
+    }));
+  },
+  deleteStrokes: (noteId, strokeIds) => {
+    set((state) => ({
+      notes: state.notes.map((note) => {
+        if (note.id !== noteId) {
+          return note;
+        }
+        const filtered = note.strokes.filter((stroke) => !strokeIds.includes(stroke.id));
+        if (filtered.length === note.strokes.length) {
+          return note;
+        }
+        return {
+          ...note,
+          strokes: filtered,
+          undoneStrokes: [],
+          updatedAt: now(),
+        };
+      }),
+    }));
+  },
+  moveStrokes: (noteId, strokeIds, dx, dy) => {
+    set((state) => ({
+      notes: state.notes.map((note) => {
+        if (note.id !== noteId) {
+          return note;
+        }
+        return {
+          ...note,
+          strokes: note.strokes.map((stroke) => {
+            if (!strokeIds.includes(stroke.id)) {
+              return stroke;
+            }
+            return {
+              ...stroke,
+              points: stroke.points.map((p) => ({
+                ...p,
+                x: p.x + dx,
+                y: p.y + dy,
+              })),
+            };
+          }),
           undoneStrokes: [],
           updatedAt: now(),
         };

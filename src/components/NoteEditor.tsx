@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import type { Note, NoteBundle } from "../types";
+import type { Note, NoteBundle, InkTool } from "../types";
 import { buildNoteBundle } from "../store/noteStore";
 import { strokesToPngDataUrl } from "../utils/ink";
 import { InkCanvas } from "./InkCanvas";
@@ -8,21 +8,21 @@ import { Toolbar } from "./Toolbar";
 
 interface NoteEditorProps {
   note: Note | null;
-  textPreview: boolean;
-  tool: "pen" | "eraser" | "pan";
+  tool: InkTool;
   color: string;
   size: number;
   showGrid: boolean;
   showTextPanel: boolean;
   onTextChange: (value: string) => void;
-  onTogglePreview: () => void;
-  onToolChange: (tool: "pen" | "eraser" | "pan") => void;
+  onToolChange: (tool: InkTool) => void;
   onColorChange: (value: string) => void;
   onSizeChange: (value: number) => void;
   onShowGridChange: (value: boolean) => void;
   onShowTextPanelChange: (value: boolean) => void;
   onAppendStroke: (noteId: string, stroke: Note["strokes"][number]) => void;
   onEraseAt: (noteId: string, x: number, y: number, radius: number) => void;
+  onDeleteStrokes: (noteId: string, strokeIds: string[]) => void;
+  onMoveStrokes: (noteId: string, strokeIds: string[], dx: number, dy: number) => void;
   onPanViewport: (noteId: string, dx: number, dy: number) => void;
   onZoomViewportAt: (noteId: string, nextScale: number, anchorX: number, anchorY: number) => void;
   onResetViewport: () => void;
@@ -44,14 +44,12 @@ function download(name: string, content: string, mimeType: string): void {
 
 export function NoteEditor({
   note,
-  textPreview,
   tool,
   color,
   size,
   showGrid,
   showTextPanel,
   onTextChange,
-  onTogglePreview,
   onToolChange,
   onColorChange,
   onSizeChange,
@@ -59,6 +57,8 @@ export function NoteEditor({
   onShowTextPanelChange,
   onAppendStroke,
   onEraseAt,
+  onDeleteStrokes,
+  onMoveStrokes,
   onPanViewport,
   onZoomViewportAt,
   onResetViewport,
@@ -128,7 +128,7 @@ export function NoteEditor({
   };
 
   return (
-    <main className="flex h-full min-h-0 flex-col overflow-hidden rounded-2xl border border-slate-200 bg-panel shadow-soft" ref={rootRef}>
+    <main className="flex h-full min-h-0 min-w-0 flex-col overflow-hidden rounded-2xl border border-slate-200 bg-panel shadow-soft" ref={rootRef}>
       <Toolbar
         tool={tool}
         color={color}
@@ -164,7 +164,7 @@ export function NoteEditor({
         }}
       />
 
-      <div className="relative min-h-0 flex-1">
+      <div className="relative min-h-0 min-w-0 flex-1">
         <InkCanvas
           note={safeNote}
           tool={tool}
@@ -173,17 +173,18 @@ export function NoteEditor({
           showGrid={showGrid}
           onAppendStroke={onAppendStroke}
           onEraseAt={onEraseAt}
+          onDeleteStrokes={onDeleteStrokes}
+          onMoveStrokes={onMoveStrokes}
           onPanViewport={onPanViewport}
           onZoomViewportAt={onZoomViewportAt}
         />
 
         {showTextPanel ? (
-          <section className="absolute bottom-3 right-3 top-3 z-20 w-[420px] max-w-[calc(100%-1.5rem)] overflow-hidden rounded-xl border border-slate-200 bg-white shadow-2xl max-md:left-3 max-md:w-auto">
+          <section className="absolute bottom-3 right-3 top-3 z-20 flex min-h-0 w-[420px] max-w-[calc(100%-1.5rem)] flex-col overflow-hidden rounded-xl border border-slate-200 bg-white shadow-2xl max-md:left-3 max-md:w-auto">
             <TextEditor
               text={safeNote.text}
-              preview={textPreview}
               onTextChange={onTextChange}
-              onTogglePreview={onTogglePreview}
+              onClose={() => onShowTextPanelChange(false)}
             />
           </section>
         ) : null}

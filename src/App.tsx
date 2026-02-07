@@ -11,7 +11,6 @@ export default function App(): JSX.Element {
     notes,
     selectedNoteId,
     searchQuery,
-    textPreview,
     tool,
     color,
     size,
@@ -25,7 +24,6 @@ export default function App(): JSX.Element {
     renameNote,
     deleteNote,
     setSearchQuery,
-    setTextPreview,
     updateNoteText,
     setTool,
     setColor,
@@ -34,6 +32,8 @@ export default function App(): JSX.Element {
     setShowTextPanel,
     appendStroke,
     eraseAt,
+    deleteStrokes,
+    moveStrokes,
     panViewport,
     zoomViewportAt,
     resetViewport,
@@ -68,12 +68,11 @@ export default function App(): JSX.Element {
 
     try {
       const parsed = JSON.parse(raw) as Partial<{
-        tool: "pen" | "eraser" | "pan";
+        tool: "pen" | "eraser" | "pan" | "selector" | "highlighter";
         color: string;
         size: number;
         showGrid: boolean;
         showTextPanel: boolean;
-        textPreview: boolean;
       }>;
 
       if (parsed.tool) {
@@ -91,15 +90,12 @@ export default function App(): JSX.Element {
       if (typeof parsed.showTextPanel === "boolean") {
         setShowTextPanel(parsed.showTextPanel);
       }
-      if (typeof parsed.textPreview === "boolean") {
-        setTextPreview(parsed.textPreview);
-      }
     } catch (error: unknown) {
       console.error("Failed to load UI settings", error);
     } finally {
       setUiSettingsReady(true);
     }
-  }, [setColor, setShowGrid, setShowTextPanel, setSize, setTextPreview, setTool]);
+  }, [setColor, setShowGrid, setShowTextPanel, setSize, setTool]);
 
   useEffect(() => {
     if (!uiSettingsReady) {
@@ -113,10 +109,9 @@ export default function App(): JSX.Element {
         size,
         showGrid,
         showTextPanel,
-        textPreview,
       }),
     );
-  }, [color, showGrid, showTextPanel, size, textPreview, tool, uiSettingsReady]);
+  }, [color, showGrid, showTextPanel, size, tool, uiSettingsReady]);
 
   useEffect(() => {
     loadNotesFromDb()
@@ -197,17 +192,15 @@ export default function App(): JSX.Element {
           onDelete={deleteNote}
         />
 
-        <div className="relative h-full min-h-0">
+        <div className="relative h-full min-h-0 min-w-0">
           <NoteEditor
             note={selectedNote}
-            textPreview={textPreview}
             tool={tool}
             color={color}
             size={size}
             showGrid={showGrid}
             showTextPanel={showTextPanel}
             onTextChange={updateNoteText}
-            onTogglePreview={() => setTextPreview(!textPreview)}
             onToolChange={setTool}
             onColorChange={setColor}
             onSizeChange={setSize}
@@ -215,6 +208,8 @@ export default function App(): JSX.Element {
             onShowTextPanelChange={setShowTextPanel}
             onAppendStroke={appendStroke}
             onEraseAt={eraseAt}
+            onDeleteStrokes={deleteStrokes}
+            onMoveStrokes={moveStrokes}
             onPanViewport={panViewport}
             onZoomViewportAt={zoomViewportAt}
             onResetViewport={resetViewport}
