@@ -13,6 +13,10 @@ Pen-first note taking app built with React 18 + TypeScript + Vite + Tailwind CSS
 - Pressure-sensitive smoothing via `perfect-freehand`
 - Pan tool, eraser (real stroke deletion), undo/redo, clear ink
 - Toggleable grid overlay (aligned to pan/zoom world space)
+- **AI-Powered Math Solver**: Select handwritten equations and solve them using Wolfram Alpha
+  - Automatic handwriting recognition via GPT-4 Vision
+  - Step-by-step solutions powered by Wolfram Alpha
+  - Support for algebra, calculus, trigonometry, and more
 - Modernized minimal UI with Tailwind CSS
 - React 18 responsiveness patterns (`useTransition`, `useDeferredValue`, `memo`)
 - Cloud storage with MongoDB backend
@@ -54,7 +58,15 @@ Update the `MONGODB_URI` in `server/.env`:
 PORT=3001
 MONGODB_URI=your-mongodb-atlas-connection-string
 NODE_ENV=development
+OPENROUTER_API_KEY=your-openrouter-api-key-here
+WOLFRAM_APP_ID=your-wolfram-app-id-here
 ```
+
+**For AI-Powered Math Solving**:
+- `OPENROUTER_API_KEY`: Required for handwriting recognition. See [OPENROUTER_GUIDE.md](./OPENROUTER_GUIDE.md)
+- `WOLFRAM_APP_ID`: Required for solving equations. See [WOLFRAM_ALPHA_GUIDE.md](./WOLFRAM_ALPHA_GUIDE.md)
+
+Both are free to get started (2,000 queries/month for Wolfram Alpha).
 
 3. **Start the backend server**:
 
@@ -210,12 +222,19 @@ Edit `src/utils/ink.ts` in `strokePolygon()`:
 
 ## API Endpoints
 
+### Notes
 - `GET /api/notes` - Fetch all notes
 - `GET /api/notes/:id` - Fetch specific note
 - `POST /api/notes` - Create new note
 - `PUT /api/notes/:id` - Update note
 - `DELETE /api/notes/:id` - Delete note
 - `POST /api/notes/bulk` - Bulk save/update notes
+
+### AI Features
+- `POST /api/solve` - Solve handwritten math equations (requires OPENROUTER_API_KEY and WOLFRAM_APP_ID)
+- `POST /api/graph` - Recognize equations for graphing (requires OPENROUTER_API_KEY)
+
+### Health
 - `GET /health` - Health check
 
 ## Real-time Collaboration (Future)
