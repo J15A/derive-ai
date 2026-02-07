@@ -631,6 +631,7 @@ export function NoteEditor({
           onDuplicateStrokes={onDuplicateStrokes}
           onChangeStrokesColor={onChangeStrokesColor}
           onAddTextAnnotation={onAddTextAnnotation}
+          onAddImage={onAddImage}
           onDeleteImages={onDeleteImages}
           onMoveImages={onMoveImages}
           onScaleStrokes={onScaleStrokes}

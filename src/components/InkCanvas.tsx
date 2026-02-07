@@ -1,9 +1,9 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import type { InkPoint, InkStroke, InkTool, Note, TextAnnotation } from "../types";
+import type { InkPoint, InkStroke, InkTool, Note, TextAnnotation, WhiteboardImage } from "../types";
 import { drawStrokePolygon, strokePolygon, strokesToPngDataUrl, uid } from "../utils/ink";
 import { solveEquation, recognizeEquationForGraph } from "../api/client";
 import { SelectionPopup } from "./SelectionPopup";
-// import { textToStrokes } from "../utils/textToStrokes";
+import { textToImage } from "../utils/textToImage";
 
 interface InkCanvasProps {
   note: Note;
@@ -19,6 +19,7 @@ interface InkCanvasProps {
   onDuplicateStrokes: (noteId: string, strokeIds: string[]) => string[];
   onChangeStrokesColor: (noteId: string, strokeIds: string[], newColor: string) => void;
   onAddTextAnnotation: (noteId: string, annotation: TextAnnotation) => void;
+  onAddImage: (noteId: string, image: WhiteboardImage) => void;
   onDeleteImages: (noteId: string, imageIds: string[]) => void;
   onMoveImages: (noteId: string, imageIds: string[], dx: number, dy: number) => void;
   onScaleStrokes: (noteId: string, strokeIds: string[], scale: number, centerX: number, centerY: number) => void;
@@ -49,6 +50,7 @@ export function InkCanvas({
   onDuplicateStrokes,
   onChangeStrokesColor,
   onAddTextAnnotation,
+  onAddImage,
   onPanViewport,
   onZoomViewportAt,
   onAddToGraph,
@@ -1081,23 +1083,25 @@ export function InkCanvas({
     setShowPopup(false);
   };
 
-  const handleTextSubmit = () => {
+  const handleTextSubmit = async () => {
     if (!textInput || !textValue.trim()) {
       setTextInput(null);
       setTextValue("");
       return;
     }
 
-    const annotation: TextAnnotation = {
-      id: uid(),
-      x: textInput.worldX,
-      y: textInput.worldY,
-      text: textValue.trim(),
-      fontSize: 56,
+    const image = await textToImage(
+      textValue.trim(),
+      textInput.worldX,
+      textInput.worldY,
+      56,
       color,
-    };
+    );
 
-    onAddTextAnnotation(note.id, annotation);
+    if (image) {
+      onAddImage(note.id, image);
+    }
+
     setTextInput(null);
     setTextValue("");
     scheduleDraw();
