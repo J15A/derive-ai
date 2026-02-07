@@ -1,9 +1,9 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import type { InkPoint, InkStroke, InkTool, Note, TextAnnotation } from "../types";
+import type { InkPoint, InkStroke, InkTool, Note, TextAnnotation, WhiteboardImage } from "../types";
 import { drawStrokePolygon, strokePolygon, strokesToPngDataUrl, uid } from "../utils/ink";
 import { solveEquation, recognizeEquationForGraph } from "../api/client";
 import { SelectionPopup } from "./SelectionPopup";
-import { textToStrokes } from "../utils/textToStrokes";
+import { textToImage } from "../utils/textToImage";
 
 interface InkCanvasProps {
   note: Note;
@@ -25,6 +25,7 @@ interface InkCanvasProps {
   onScaleImages: (noteId: string, imageIds: string[], scale: number, centerX: number, centerY: number) => void;
   onPanViewport: (noteId: string, dx: number, dy: number) => void;
   onZoomViewportAt: (noteId: string, nextScale: number, anchorX: number, anchorY: number) => void;
+  onAddImage: (noteId: string, image: WhiteboardImage) => void;
   onAddToGraph?: (latex: string) => void;
   onExportReady?: (exportFn: () => string) => void;
 }
@@ -49,6 +50,7 @@ export function InkCanvas({
   onDuplicateStrokes,
   onChangeStrokesColor,
   onAddTextAnnotation,
+  onAddImage,
   onPanViewport,
   onZoomViewportAt,
   onAddToGraph,
@@ -1108,8 +1110,6 @@ export function InkCanvas({
   };
 
   const handleTextSubmit = async () => {
-    console.log("handleTextSubmit called", { textInput, textValue });
-    
     if (!textInput || !textValue.trim()) {
       setTextInput(null);
       setTextValue("");
@@ -1118,18 +1118,14 @@ export function InkCanvas({
 
     try {
       const fontSize = 48;
-      console.log("Converting text to strokes...", textValue);
-      const strokes = await textToStrokes(textValue, textInput.worldX, textInput.worldY, fontSize, color);
-      console.log("Generated strokes:", strokes.length);
-      
-      for (const stroke of strokes) {
-        onAppendStroke(note.id, stroke);
+      const image = await textToImage(textValue, textInput.worldX, textInput.worldY, fontSize, color);
+      if (image) {
+        onAddImage(note.id, image);
       }
-      
       setTextInput(null);
       setTextValue("");
     } catch (error) {
-      console.error("Failed to convert text to strokes:", error);
+      console.error("Failed to render text:", error);
       setTextInput(null);
       setTextValue("");
     }

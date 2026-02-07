@@ -289,6 +289,7 @@ export function NoteEditor({
           onMoveImages={onMoveImages}
           onScaleStrokes={onScaleStrokes}
           onScaleImages={onScaleImages}
+          onAddImage={onAddImage}
           onPanViewport={onPanViewport}
           onZoomViewportAt={onZoomViewportAt}
           onAddToGraph={handleAddToGraph}

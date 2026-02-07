@@ -209,12 +209,7 @@ export function Toolbar({
             </div>
           )}
         </div>
-        
-        {toolButton("eraser", <Eraser size={20} />)}
-        {toolButton("pan", <Hand size={20} />)}
-        {toolButton("selector", <SquareDashedMousePointer size={20} />)}
-        {toolButton("text", <TextCursor size={20} />)}
-        
+
         {/* Highlighter with color dropdown */}
         <div 
           className="relative"
@@ -268,6 +263,11 @@ export function Toolbar({
             </div>
           )}
         </div>
+        
+        {toolButton("eraser", <Eraser size={20} />)}
+        {toolButton("pan", <Hand size={20} />)}
+        {toolButton("selector", <SquareDashedMousePointer size={20} />)}
+        {toolButton("text", <TextCursor size={20} />)}
         
         <button 
           className="tool-btn"
