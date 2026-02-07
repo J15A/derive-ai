@@ -37,9 +37,17 @@ const HIGHLIGHTER_COLORS = [
   { name: "Purple", value: "#9C27B0" },
 ];
 
+const PEN_COLORS = [
+  { name: "Black", value: "#111827" },
+  { name: "Red", value: "#EF4444" },
+  { name: "Blue", value: "#3B82F6" },
+  { name: "Green", value: "#10B981" },
+  { name: "Purple", value: "#8B5CF6" },
+  { name: "Orange", value: "#F97316" },
+];
+
 export function Toolbar({
   tool,
-  color,
   size,
   showGrid,
   showTextPanel,
@@ -62,7 +70,9 @@ export function Toolbar({
   onImportBundle,
 }: ToolbarProps): JSX.Element {
   const settingsRef = useRef<HTMLDetailsElement | null>(null);
+  const [showPenMenu, setShowPenMenu] = useState(false);
   const [showHighlighterMenu, setShowHighlighterMenu] = useState(false);
+  const [penColor, setPenColor] = useState("#111827");
   const [highlighterColor, setHighlighterColor] = useState(HIGHLIGHTER_COLORS[0].value);
 
   useEffect(() => {
@@ -105,6 +115,12 @@ export function Toolbar({
     </button>
   );
 
+  const handlePenColorSelect = (newColor: string) => {
+    setPenColor(newColor);
+    onColorChange(newColor);
+    onToolChange("pen");
+  };
+
   const handleHighlighterColorSelect = (newColor: string) => {
     setHighlighterColor(newColor);
     onColorChange(newColor);
@@ -114,14 +130,69 @@ export function Toolbar({
   return (
     <div className="flex min-w-0 items-center gap-2 border-b border-slate-100 p-3">
       <div className="flex min-w-0 items-center gap-2">
-        {toolButton("pen", <Pen size={20} />)}
+        {/* Pen with color dropdown */}
+        <div 
+          className="relative pb-2"
+          onMouseEnter={() => setShowPenMenu(true)}
+          onMouseLeave={() => setShowPenMenu(false)}
+        >
+          <button
+            className={`flex h-10 w-10 items-center justify-center rounded-full transition-colors ${
+              tool === "pen" 
+                ? "bg-slate-700 text-white hover:bg-slate-600" 
+                : "text-slate-700 hover:bg-slate-200"
+            }`}
+            type="button"
+            onClick={() => {
+              onColorChange(penColor);
+              onToolChange("pen");
+            }}
+            title="Pen"
+          >
+            <Pen size={20} />
+          </button>
+          
+          {/* Color dropdown menu */}
+          {showPenMenu && (
+            <div className="absolute left-0 top-10 z-50 flex flex-col gap-2 rounded-lg border border-slate-200 bg-white p-2 shadow-lg">
+              <div className="flex gap-1">
+                {PEN_COLORS.map((c) => (
+                  <button
+                    key={c.value}
+                    className="h-8 w-8 rounded-md border-2 transition-transform hover:scale-110"
+                    style={{ 
+                      backgroundColor: c.value,
+                      borderColor: penColor === c.value ? "#334155" : "transparent"
+                    }}
+                    onClick={() => handlePenColorSelect(c.value)}
+                    title={c.name}
+                    type="button"
+                  />
+                ))}
+              </div>
+              <div className="flex items-center gap-2 rounded-lg border border-slate-200 bg-slate-50 p-2">
+                <span className="w-14 text-xs font-semibold text-slate-600">Size</span>
+                <input
+                  type="range"
+                  min={1}
+                  max={24}
+                  value={size}
+                  onChange={(e) => onSizeChange(Number(e.target.value))}
+                  className="w-full"
+                />
+                <span className="w-7 text-center text-xs font-semibold text-slate-700">{size}</span>
+              </div>
+            </div>
+          )}
+        </div>
+        
         {toolButton("eraser", <Eraser size={20} />)}
         {toolButton("pan", <Hand size={20} />)}
         {toolButton("selector", <SquareDashedMousePointer size={20} />)}
         
         {/* Highlighter with color dropdown */}
         <div 
-          className="relative"
+          className="relative pb-2"
           onMouseEnter={() => setShowHighlighterMenu(true)}
           onMouseLeave={() => setShowHighlighterMenu(false)}
         >
@@ -143,7 +214,7 @@ export function Toolbar({
           
           {/* Color dropdown menu */}
           {showHighlighterMenu && (
-            <div className="absolute left-0 top-12 z-50 flex gap-1 rounded-lg border border-slate-200 bg-white p-2 shadow-lg">
+            <div className="absolute left-0 top-10 z-50 flex gap-1 rounded-lg border border-slate-200 bg-white p-2 shadow-lg">
               {HIGHLIGHTER_COLORS.map((c) => (
                 <button
                   key={c.value}
@@ -171,26 +242,6 @@ export function Toolbar({
         <summary className="btn h-9 list-none select-none">Settings</summary>
 
         <div className="absolute right-0 top-11 z-30 w-[320px] space-y-3 rounded-xl border border-slate-200 bg-white p-3 shadow-2xl">
-          <div className="flex items-center gap-2 rounded-lg border border-slate-200 bg-slate-50 p-2">
-            <span className="w-14 text-xs font-semibold text-slate-600">Color</span>
-            <input
-              type="color"
-              value={color}
-              onChange={(e) => onColorChange(e.target.value)}
-              disabled={tool !== "pen"}
-              className="h-8 w-10 cursor-pointer rounded border border-slate-300 bg-white disabled:cursor-not-allowed"
-            />
-            <span className="ml-2 w-10 text-xs font-semibold text-slate-600">Size</span>
-            <input
-              type="range"
-              min={1}
-              max={24}
-              value={size}
-              onChange={(e) => onSizeChange(Number(e.target.value))}
-              className="w-full"
-            />
-            <span className="w-7 text-center text-xs font-semibold text-slate-700">{size}</span>
-          </div>
 
           <div className="grid grid-cols-2 gap-2">
             <button className={`btn ${showGrid ? "btn-active" : ""}`} type="button" onClick={() => onShowGridChange(!showGrid)}>
