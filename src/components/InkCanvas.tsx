@@ -710,6 +710,8 @@ export function InkCanvas({
   };
 
   const handleTextSubmit = async () => {
+    console.log("handleTextSubmit called", { textInput, textValue });
+    
     if (!textInput || !textValue.trim()) {
       setTextInput(null);
       setTextValue("");
@@ -718,7 +720,9 @@ export function InkCanvas({
 
     try {
       const fontSize = 48;
+      console.log("Converting text to strokes...", textValue);
       const strokes = await textToStrokes(textValue, textInput.worldX, textInput.worldY, fontSize, color);
+      console.log("Generated strokes:", strokes.length);
       
       for (const stroke of strokes) {
         onAppendStroke(note.id, stroke);
