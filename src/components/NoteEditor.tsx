@@ -271,6 +271,7 @@ export function NoteEditor({
 
       <div className="relative min-h-0 min-w-0 flex-1">
         <InkCanvas
+          key={safeNote.id}
           note={safeNote}
           tool={tool}
           color={color}

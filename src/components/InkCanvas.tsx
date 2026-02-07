@@ -355,6 +355,11 @@ export function InkCanvas({
       observer.disconnect();
       window.removeEventListener("resize", handleViewportChange);
       document.removeEventListener("fullscreenchange", handleViewportChange);
+      // Cancel any pending animation frame
+      if (rafRef.current !== null) {
+        cancelAnimationFrame(rafRef.current);
+        rafRef.current = null;
+      }
     };
   }, [drawScene]);
 
@@ -362,36 +367,57 @@ export function InkCanvas({
     scheduleDraw();
   }, [note, tool, penSize, highlighterSize, color, scheduleDraw]);
 
+  // Reset all state when note changes to prevent stale state issues
+  useEffect(() => {
+    setSelectedStrokes([]);
+    setSelectedImages([]);
+    setSelectionBox(null);
+    setShowPopup(false);
+    setIsDraggingSelection(false);
+    setIsResizing(false);
+    setResizeHandle(null);
+    setResizeStart(null);
+    setDragOffset(null);
+    setEraserTrail([]);
+    setTextInput(null);
+    setTextValue("");
+    drawingPointerId.current = null;
+    isDrawingRef.current = false;
+    panPointerId.current = null;
+    currentPointsRef.current = [];
+    lastPanRef.current = null;
+  }, [note.id]);
+
   // Load images when they change
   useEffect(() => {
-    const newLoadedImages = new Map(loadedImages);
-    let hasChanges = false;
+    setLoadedImages((prevLoadedImages) => {
+      const newLoadedImages = new Map(prevLoadedImages);
+      let hasChanges = false;
 
-    for (const image of note.images) {
-      if (!newLoadedImages.has(image.id)) {
-        const img = new Image();
-        img.src = image.dataUrl;
-        newLoadedImages.set(image.id, img);
-        hasChanges = true;
-        
-        img.onload = () => {
-          scheduleDraw();
-        };
+      for (const image of note.images) {
+        if (!newLoadedImages.has(image.id)) {
+          const img = new Image();
+          img.src = image.dataUrl;
+          newLoadedImages.set(image.id, img);
+          hasChanges = true;
+          
+          img.onload = () => {
+            scheduleDraw();
+          };
+        }
       }
-    }
 
-    // Remove images that no longer exist
-    for (const [id] of newLoadedImages) {
-      if (!note.images.some((img) => img.id === id)) {
-        newLoadedImages.delete(id);
-        hasChanges = true;
+      // Remove images that no longer exist
+      for (const [id] of newLoadedImages) {
+        if (!note.images.some((img) => img.id === id)) {
+          newLoadedImages.delete(id);
+          hasChanges = true;
+        }
       }
-    }
 
-    if (hasChanges) {
-      setLoadedImages(newLoadedImages);
-    }
-  }, [note.images, scheduleDraw, loadedImages]);
+      return hasChanges ? newLoadedImages : prevLoadedImages;
+    });
+  }, [note.images, scheduleDraw]);
 
   useEffect(() => {
     // Clear selection when switching away from selector tool

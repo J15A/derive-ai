@@ -230,6 +230,7 @@ export default function App(): JSX.Element {
 
         <div className="relative h-full min-h-0 min-w-0">
           <NoteEditor
+            key={selectedNote?.id}
             note={selectedNote}
             tool={tool}
             color={color}
