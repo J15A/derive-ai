@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { X, ChevronDown, ChevronUp } from "lucide-react";
+import { X, ChevronDown, ChevronUp, MoveDiagonal2 } from "lucide-react";
 
 declare global {
   interface Window {
@@ -34,6 +34,10 @@ interface GraphPanelProps {
   equations: GraphEquation[];
   onRemoveEquation: (id: string) => void;
   onClose: () => void;
+  onHeaderPointerDown?: (event: React.PointerEvent<HTMLDivElement>) => void;
+  onHeaderResizePointerDown?: (event: React.PointerEvent<HTMLDivElement>) => void;
+  isDragging?: boolean;
+  showResizeHandle?: boolean;
 }
 
 export type { GraphEquation };
@@ -58,6 +62,10 @@ export function GraphPanel({
   equations,
   onRemoveEquation,
   onClose,
+  onHeaderPointerDown,
+  onHeaderResizePointerDown,
+  isDragging = false,
+  showResizeHandle = true,
 }: GraphPanelProps): JSX.Element {
   const containerRef = useRef<HTMLDivElement>(null);
   const calcRef = useRef<DesmosCalculator | null>(null);
@@ -197,9 +205,23 @@ export function GraphPanel({
   }, [equations.length]);
 
   return (
-    <section className="flex flex-col overflow-hidden rounded-xl border border-slate-200 bg-white shadow-2xl">
+    <section className="flex h-full flex-col overflow-hidden rounded-xl border border-slate-200 bg-white shadow-2xl">
       {/* Header */}
-      <div className="flex shrink-0 items-center justify-end border-b border-slate-100 bg-slate-50 px-2 py-1.5">
+      <div
+        className={`flex shrink-0 items-center justify-between border-b border-slate-100 bg-slate-50 px-2 py-1.5 ${onHeaderPointerDown ? (isDragging ? "cursor-grabbing" : "cursor-grab") : ""}`}
+        onPointerDown={onHeaderPointerDown}
+      >
+        {showResizeHandle ? (
+          <div
+            className="p-1 text-slate-500 cursor-nwse-resize select-none"
+            onPointerDown={onHeaderResizePointerDown}
+            title="Resize graph"
+          >
+            <MoveDiagonal2 size={15} />
+          </div>
+        ) : (
+          <div />
+        )}
         <div className="flex items-center gap-1">
           <button
             type="button"
@@ -221,10 +243,10 @@ export function GraphPanel({
       </div>
 
       {!collapsed && (
-        <>
+        <div className="flex min-h-0 flex-1 flex-col">
           {/* Desmos graph container */}
           {loadError ? (
-            <div className="flex h-[300px] w-full items-center justify-center bg-red-50 px-4 text-center">
+            <div className="flex min-h-[220px] flex-1 items-center justify-center bg-red-50 px-4 text-center">
               <div>
                 <p className="text-sm font-medium text-red-700">{loadError}</p>
                 <button
@@ -237,7 +259,7 @@ export function GraphPanel({
               </div>
             </div>
           ) : (
-            <div ref={containerRef} className="h-[300px] w-full" />
+            <div ref={containerRef} className="min-h-[220px] flex-1 w-full" />
           )}
 
           {/* Equations list */}
@@ -269,11 +291,11 @@ export function GraphPanel({
           )}
 
           {equations.length === 0 && (
-            <div className="px-3 py-4 text-center text-xs text-slate-400">
+            <div className="border-t border-slate-100 px-3 py-3 text-center text-xs text-slate-400">
               Select strokes and click the graph button to add equations
             </div>
           )}
-        </>
+        </div>
       )}
     </section>
   );

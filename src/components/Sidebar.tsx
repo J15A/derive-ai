@@ -45,17 +45,17 @@ function SidebarImpl({
   }
 
   return (
-    <aside className="relative z-30 flex h-full min-h-0 flex-col rounded-2xl border border-slate-200 bg-panel shadow-soft transition-transform duration-300 ease-in-out">
+    <aside className="relative z-30 flex h-full min-h-0 flex-col rounded-2xl border border-slate-200 bg-panel shadow-soft transition-transform duration-300 ease-in-out max-sm:rounded-none max-sm:border-x-0 max-sm:border-t-0">
       <button
         onClick={onToggleCollapse}
-        className="absolute -right-8 top-1/2 z-10 flex h-24 w-8 -translate-y-1/2 items-center justify-center rounded-r-2xl border border-l-0 border-slate-200 bg-panel text-slate-500 transition-all duration-200 hover:w-10 hover:-right-10 hover:bg-slate-50 hover:text-slate-700"
+        className="absolute -right-8 top-1/2 z-10 flex h-24 w-8 -translate-y-1/2 items-center justify-center rounded-r-2xl border border-l-0 border-slate-200 bg-panel text-slate-500 transition-all duration-200 hover:w-10 hover:-right-10 hover:bg-slate-50 hover:text-slate-700 max-sm:hidden"
         title="Close sidebar"
         type="button"
       >
         <ChevronLeft size={18} />
       </button>
 
-      <div className="space-y-2 border-b border-slate-100 p-3">
+      <div className="space-y-2 border-b border-slate-100 p-3 max-sm:space-y-3">
         <button className="btn btn-active w-full" onClick={onCreate} type="button">
           New Note
         </button>
@@ -70,11 +70,11 @@ function SidebarImpl({
             startTransition(() => onSearch(next));
           }}
           placeholder="Search notes"
-          className="input"
+          className="input max-sm:py-3 max-sm:text-base"
         />
       </div>
 
-      <div className="min-h-0 flex-1 space-y-1 overflow-auto p-2">
+      <div className="min-h-0 flex-1 space-y-1 overflow-auto p-2 max-sm:space-y-2 max-sm:p-3">
         {filtered.map((note) => {
           const isSelected = note.id === selectedNoteId;
           const isEditing = editingId === note.id;
@@ -82,8 +82,8 @@ function SidebarImpl({
           return (
             <div
               key={note.id}
-              className={`grid grid-cols-[1fr_auto] items-center gap-2 rounded-lg p-1 ${
-                isSelected ? "bg-slate-100" : "hover:bg-slate-50"
+              className={`grid grid-cols-[1fr_auto] items-center gap-2 rounded-lg p-1 max-sm:p-2 ${
+                isSelected ? "bg-slate-100 ring-1 ring-slate-200" : "hover:bg-slate-50"
               }`}
             >
               {isEditing ? (
@@ -105,7 +105,7 @@ function SidebarImpl({
               ) : (
                 <button
                   type="button"
-                  className="truncate rounded-md px-2 py-1.5 text-left text-sm text-slate-800"
+                  className="truncate rounded-md px-2 py-1.5 text-left text-sm text-slate-800 max-sm:py-2.5 max-sm:text-base"
                   onClick={() => startTransition(() => onSelect(note.id))}
                   onDoubleClick={() => setEditingId(note.id)}
                 >
@@ -115,7 +115,7 @@ function SidebarImpl({
 
               <button
                 type="button"
-                className="flex h-8 w-8 items-center justify-center rounded-md text-slate-500 transition hover:bg-slate-200 hover:text-red-600"
+                className="flex h-8 w-8 items-center justify-center rounded-md text-slate-500 transition hover:bg-slate-200 hover:text-red-600 max-sm:h-10 max-sm:w-10"
                 onClick={() => {
                   if (window.confirm("Delete this note?")) {
                     onDelete(note.id);

@@ -91,10 +91,41 @@ export function NoteEditor({
   onImportBundle,
 }: NoteEditorProps): JSX.Element {
   const safeNote = useMemo(() => note, [note]);
+  const [isPhone, setIsPhone] = useState<boolean>(() =>
+    typeof window !== "undefined" ? window.matchMedia("(max-width: 639px)").matches : false,
+  );
   const rootRef = useRef<HTMLElement | null>(null);
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [showGraphPanel, setShowGraphPanel] = useState(false);
+  const [notesCollapsed, setNotesCollapsed] = useState(false);
   const [graphEquations, setGraphEquations] = useState<GraphEquation[]>([]);
+  const canvasAreaRef = useRef<HTMLDivElement | null>(null);
+  const [graphPanelPosition, setGraphPanelPosition] = useState<{ x: number; y: number } | null>(null);
+  const [graphPanelSize, setGraphPanelSize] = useState<{ width: number; height: number }>({ width: 380, height: 420 });
+  const [isDraggingGraphPanel, setIsDraggingGraphPanel] = useState(false);
+  const graphDragOffsetRef = useRef<{ x: number; y: number } | null>(null);
+  const [isResizingGraphPanel, setIsResizingGraphPanel] = useState(false);
+  const graphResizeStartRef = useRef<{
+    startX: number;
+    startY: number;
+    startLeft: number;
+    startTop: number;
+    startWidth: number;
+    startHeight: number;
+  } | null>(null);
+  const [notesPanelPosition, setNotesPanelPosition] = useState<{ x: number; y: number } | null>(null);
+  const [notesPanelSize, setNotesPanelSize] = useState<{ width: number; height: number }>({ width: 420, height: 420 });
+  const [isDraggingNotesPanel, setIsDraggingNotesPanel] = useState(false);
+  const notesDragOffsetRef = useRef<{ x: number; y: number } | null>(null);
+  const [isResizingNotesPanel, setIsResizingNotesPanel] = useState(false);
+  const notesResizeStartRef = useRef<{
+    startX: number;
+    startY: number;
+    startLeft: number;
+    startTop: number;
+    startWidth: number;
+    startHeight: number;
+  } | null>(null);
   const graphColorIndex = useRef(0);
 
   const GRAPH_COLORS = [
@@ -117,6 +148,127 @@ export function NoteEditor({
     setGraphEquations((prev) => prev.filter((eq) => eq.id !== id));
   }, []);
 
+  const getDefaultGraphPanelPosition = useCallback((): { x: number; y: number } => {
+    const margin = 12;
+    const containerWidth = canvasAreaRef.current?.clientWidth ?? window.innerWidth;
+    const x = showTextPanel
+      ? margin
+      : Math.max(margin, containerWidth - graphPanelSize.width - margin);
+    return { x, y: margin };
+  }, [graphPanelSize.width, showTextPanel]);
+
+  const handleGraphHeaderPointerDown = useCallback(
+    (event: React.PointerEvent<HTMLDivElement>) => {
+      if (isPhone) {
+        return;
+      }
+      if (event.target instanceof HTMLElement && event.target.closest("button")) {
+        return;
+      }
+      if (!showGraphPanel) {
+        return;
+      }
+      const container = canvasAreaRef.current;
+      if (!container) {
+        return;
+      }
+
+      const containerRect = container.getBoundingClientRect();
+      const current = graphPanelPosition ?? getDefaultGraphPanelPosition();
+      graphDragOffsetRef.current = {
+        x: event.clientX - (containerRect.left + current.x),
+        y: event.clientY - (containerRect.top + current.y),
+      };
+      setGraphPanelPosition(current);
+      setIsDraggingGraphPanel(true);
+      event.preventDefault();
+    },
+    [getDefaultGraphPanelPosition, graphPanelPosition, isPhone, showGraphPanel],
+  );
+
+  const getDefaultNotesPanelPosition = useCallback((): { x: number; y: number } => {
+    const margin = 12;
+    const containerWidth = canvasAreaRef.current?.clientWidth ?? window.innerWidth;
+    const x = Math.max(margin, containerWidth - notesPanelSize.width - margin);
+    return { x, y: margin };
+  }, [notesPanelSize.width]);
+
+  const handleNotesHeaderPointerDown = useCallback(
+    (event: React.PointerEvent<HTMLDivElement>) => {
+      if (isPhone) {
+        return;
+      }
+      if (event.target instanceof HTMLElement && event.target.closest("button")) {
+        return;
+      }
+      if (!showTextPanel) {
+        return;
+      }
+      const container = canvasAreaRef.current;
+      if (!container) {
+        return;
+      }
+      const containerRect = container.getBoundingClientRect();
+      const current = notesPanelPosition ?? getDefaultNotesPanelPosition();
+      notesDragOffsetRef.current = {
+        x: event.clientX - (containerRect.left + current.x),
+        y: event.clientY - (containerRect.top + current.y),
+      };
+      setNotesPanelPosition(current);
+      setIsDraggingNotesPanel(true);
+      event.preventDefault();
+    },
+    [getDefaultNotesPanelPosition, isPhone, notesPanelPosition, showTextPanel],
+  );
+
+  const handleGraphResizePointerDown = useCallback((event: React.PointerEvent<HTMLDivElement>) => {
+    if (!showGraphPanel || isPhone) {
+      return;
+    }
+    const currentPosition = graphPanelPosition ?? getDefaultGraphPanelPosition();
+    graphResizeStartRef.current = {
+      startX: event.clientX,
+      startY: event.clientY,
+      startLeft: currentPosition.x,
+      startTop: currentPosition.y,
+      startWidth: graphPanelSize.width,
+      startHeight: graphPanelSize.height,
+    };
+    setIsResizingGraphPanel(true);
+    event.preventDefault();
+    event.stopPropagation();
+  }, [getDefaultGraphPanelPosition, graphPanelPosition, graphPanelSize.height, isPhone, showGraphPanel]);
+
+  const handleNotesResizePointerDown = useCallback((event: React.PointerEvent<HTMLDivElement>) => {
+    if (!showTextPanel || notesCollapsed || isPhone) {
+      return;
+    }
+    const currentPosition = notesPanelPosition ?? getDefaultNotesPanelPosition();
+    notesResizeStartRef.current = {
+      startX: event.clientX,
+      startY: event.clientY,
+      startLeft: currentPosition.x,
+      startTop: currentPosition.y,
+      startWidth: notesPanelSize.width,
+      startHeight: notesPanelSize.height,
+    };
+    setIsResizingNotesPanel(true);
+    event.preventDefault();
+    event.stopPropagation();
+  }, [getDefaultNotesPanelPosition, isPhone, notesCollapsed, notesPanelPosition, notesPanelSize.height, showTextPanel]);
+
+  useEffect(() => {
+    const mediaQuery = window.matchMedia("(max-width: 639px)");
+    const handleChange = (event: MediaQueryListEvent) => {
+      setIsPhone(event.matches);
+    };
+    setIsPhone(mediaQuery.matches);
+    mediaQuery.addEventListener("change", handleChange);
+    return () => {
+      mediaQuery.removeEventListener("change", handleChange);
+    };
+  }, []);
+
   useEffect(() => {
     const onFullscreenChange = () => {
       setIsFullscreen(document.fullscreenElement === rootRef.current);
@@ -127,6 +279,201 @@ export function NoteEditor({
       document.removeEventListener("fullscreenchange", onFullscreenChange);
     };
   }, []);
+
+  useEffect(() => {
+    if (!showGraphPanel || graphPanelPosition !== null) {
+      return;
+    }
+    setGraphPanelPosition(getDefaultGraphPanelPosition());
+  }, [getDefaultGraphPanelPosition, graphPanelPosition, showGraphPanel]);
+
+  useEffect(() => {
+    if (!showTextPanel || notesPanelPosition !== null) {
+      return;
+    }
+    setNotesPanelPosition(getDefaultNotesPanelPosition());
+  }, [getDefaultNotesPanelPosition, notesPanelPosition, showTextPanel]);
+
+  useEffect(() => {
+    if (!showGraphPanel || !graphPanelPosition || !canvasAreaRef.current) {
+      return;
+    }
+    const margin = 12;
+    const container = canvasAreaRef.current;
+    const clampedX = Math.max(margin, Math.min(graphPanelPosition.x, container.clientWidth - graphPanelSize.width - margin));
+    const clampedY = Math.max(margin, Math.min(graphPanelPosition.y, container.clientHeight - graphPanelSize.height - margin));
+    if (clampedX !== graphPanelPosition.x || clampedY !== graphPanelPosition.y) {
+      setGraphPanelPosition({ x: clampedX, y: clampedY });
+    }
+  }, [graphPanelPosition, graphPanelSize.height, graphPanelSize.width, showGraphPanel]);
+
+  useEffect(() => {
+    if (!showTextPanel || !notesPanelPosition || !canvasAreaRef.current) {
+      return;
+    }
+    const margin = 12;
+    const container = canvasAreaRef.current;
+    const currentHeight = notesCollapsed ? 44 : notesPanelSize.height;
+    const clampedX = Math.max(margin, Math.min(notesPanelPosition.x, container.clientWidth - notesPanelSize.width - margin));
+    const clampedY = Math.max(margin, Math.min(notesPanelPosition.y, container.clientHeight - currentHeight - margin));
+    if (clampedX !== notesPanelPosition.x || clampedY !== notesPanelPosition.y) {
+      setNotesPanelPosition({ x: clampedX, y: clampedY });
+    }
+  }, [notesCollapsed, notesPanelPosition, notesPanelSize.height, notesPanelSize.width, showTextPanel]);
+
+  useEffect(() => {
+    if (!isDraggingGraphPanel || isResizingGraphPanel || isPhone) {
+      return;
+    }
+
+    const handlePointerMove = (event: PointerEvent) => {
+      const container = canvasAreaRef.current;
+      const dragOffset = graphDragOffsetRef.current;
+      if (!container || !dragOffset) {
+        return;
+      }
+
+      const containerRect = container.getBoundingClientRect();
+      const panelWidth = graphPanelSize.width;
+      const panelHeight = graphPanelSize.height;
+      const margin = 12;
+
+      const rawX = event.clientX - containerRect.left - dragOffset.x;
+      const rawY = event.clientY - containerRect.top - dragOffset.y;
+
+      const nextX = Math.max(margin, Math.min(rawX, containerRect.width - panelWidth - margin));
+      const nextY = Math.max(margin, Math.min(rawY, containerRect.height - panelHeight - margin));
+      setGraphPanelPosition({ x: nextX, y: nextY });
+    };
+
+    const handlePointerUp = () => {
+      setIsDraggingGraphPanel(false);
+      graphDragOffsetRef.current = null;
+    };
+
+    window.addEventListener("pointermove", handlePointerMove);
+    window.addEventListener("pointerup", handlePointerUp);
+    return () => {
+      window.removeEventListener("pointermove", handlePointerMove);
+      window.removeEventListener("pointerup", handlePointerUp);
+    };
+  }, [graphPanelSize.height, graphPanelSize.width, isDraggingGraphPanel, isPhone, isResizingGraphPanel]);
+
+  useEffect(() => {
+    if (!isDraggingNotesPanel || isResizingNotesPanel || isPhone) {
+      return;
+    }
+
+    const handlePointerMove = (event: PointerEvent) => {
+      const container = canvasAreaRef.current;
+      const dragOffset = notesDragOffsetRef.current;
+      if (!container || !dragOffset) {
+        return;
+      }
+
+      const containerRect = container.getBoundingClientRect();
+      const panelWidth = notesPanelSize.width;
+      const panelHeight = notesCollapsed ? 44 : notesPanelSize.height;
+      const margin = 12;
+
+      const rawX = event.clientX - containerRect.left - dragOffset.x;
+      const rawY = event.clientY - containerRect.top - dragOffset.y;
+
+      const nextX = Math.max(margin, Math.min(rawX, containerRect.width - panelWidth - margin));
+      const nextY = Math.max(margin, Math.min(rawY, containerRect.height - panelHeight - margin));
+      setNotesPanelPosition({ x: nextX, y: nextY });
+    };
+
+    const handlePointerUp = () => {
+      setIsDraggingNotesPanel(false);
+      notesDragOffsetRef.current = null;
+    };
+
+    window.addEventListener("pointermove", handlePointerMove);
+    window.addEventListener("pointerup", handlePointerUp);
+    return () => {
+      window.removeEventListener("pointermove", handlePointerMove);
+      window.removeEventListener("pointerup", handlePointerUp);
+    };
+  }, [isDraggingNotesPanel, isPhone, isResizingNotesPanel, notesCollapsed, notesPanelSize.height, notesPanelSize.width]);
+
+  useEffect(() => {
+    if (!isResizingGraphPanel || isPhone) {
+      return;
+    }
+
+    const handlePointerMove = (event: PointerEvent) => {
+      const container = canvasAreaRef.current;
+      const start = graphResizeStartRef.current;
+      if (!container || !start) {
+        return;
+      }
+      const margin = 12;
+      const minWidth = 320;
+      const minHeight = 260;
+      const right = start.startLeft + start.startWidth;
+      const bottom = start.startTop + start.startHeight;
+      const maxWidth = Math.max(minWidth, right - margin);
+      const maxHeight = Math.max(minHeight, bottom - margin);
+      const nextWidth = Math.max(minWidth, Math.min(start.startWidth - (event.clientX - start.startX), maxWidth));
+      const nextHeight = Math.max(minHeight, Math.min(start.startHeight - (event.clientY - start.startY), maxHeight));
+      const nextLeft = right - nextWidth;
+      const nextTop = bottom - nextHeight;
+      setGraphPanelSize({ width: nextWidth, height: nextHeight });
+      setGraphPanelPosition({ x: nextLeft, y: nextTop });
+    };
+
+    const handlePointerUp = () => {
+      setIsResizingGraphPanel(false);
+      graphResizeStartRef.current = null;
+    };
+
+    window.addEventListener("pointermove", handlePointerMove);
+    window.addEventListener("pointerup", handlePointerUp);
+    return () => {
+      window.removeEventListener("pointermove", handlePointerMove);
+      window.removeEventListener("pointerup", handlePointerUp);
+    };
+  }, [isPhone, isResizingGraphPanel]);
+
+  useEffect(() => {
+    if (!isResizingNotesPanel || isPhone) {
+      return;
+    }
+
+    const handlePointerMove = (event: PointerEvent) => {
+      const container = canvasAreaRef.current;
+      const start = notesResizeStartRef.current;
+      if (!container || !start) {
+        return;
+      }
+      const margin = 12;
+      const minWidth = 340;
+      const minHeight = 220;
+      const right = start.startLeft + start.startWidth;
+      const bottom = start.startTop + start.startHeight;
+      const maxWidth = Math.max(minWidth, right - margin);
+      const maxHeight = Math.max(minHeight, bottom - margin);
+      const nextWidth = Math.max(minWidth, Math.min(start.startWidth - (event.clientX - start.startX), maxWidth));
+      const nextHeight = Math.max(minHeight, Math.min(start.startHeight - (event.clientY - start.startY), maxHeight));
+      const nextLeft = right - nextWidth;
+      const nextTop = bottom - nextHeight;
+      setNotesPanelSize({ width: nextWidth, height: nextHeight });
+      setNotesPanelPosition({ x: nextLeft, y: nextTop });
+    };
+
+    const handlePointerUp = () => {
+      setIsResizingNotesPanel(false);
+      notesResizeStartRef.current = null;
+    };
+
+    window.addEventListener("pointermove", handlePointerMove);
+    window.addEventListener("pointerup", handlePointerUp);
+    return () => {
+      window.removeEventListener("pointermove", handlePointerMove);
+      window.removeEventListener("pointerup", handlePointerUp);
+    };
+  }, [isPhone, isResizingNotesPanel]);
 
   const toggleFullscreen = useCallback(async () => {
     if (!rootRef.current) {
@@ -269,7 +616,7 @@ export function NoteEditor({
         }}
       />
 
-      <div className="relative min-h-0 min-w-0 flex-1">
+      <div className="relative min-h-0 min-w-0 flex-1" ref={canvasAreaRef}>
         <InkCanvas
           note={safeNote}
           tool={tool}
@@ -294,21 +641,62 @@ export function NoteEditor({
         />
 
         {showTextPanel ? (
-          <section className="absolute bottom-3 right-3 top-3 z-20 flex min-h-0 w-[420px] max-w-[calc(100%-1.5rem)] flex-col overflow-hidden rounded-xl border border-slate-200 bg-white shadow-2xl max-md:left-3 max-md:w-auto">
+          <section
+            className={`absolute z-20 flex min-h-0 max-w-[calc(100%-1.5rem)] flex-col overflow-hidden rounded-xl border border-slate-200 bg-white shadow-2xl ${notesCollapsed ? "h-11" : ""}`}
+            style={{
+              left: isPhone ? "12px" : `${(notesPanelPosition ?? getDefaultNotesPanelPosition()).x}px`,
+              right: isPhone ? "12px" : undefined,
+              top: isPhone ? undefined : `${(notesPanelPosition ?? getDefaultNotesPanelPosition()).y}px`,
+              bottom: isPhone ? "12px" : undefined,
+              width: isPhone ? undefined : `${notesPanelSize.width}px`,
+              height: notesCollapsed
+                ? undefined
+                : isPhone
+                  ? showGraphPanel
+                    ? "44%"
+                    : "52%"
+                  : `${notesPanelSize.height}px`,
+              maxHeight: notesCollapsed ? undefined : "calc(100% - 1.5rem)",
+              minHeight: notesCollapsed ? undefined : "220px",
+            }}
+          >
             <TextEditor
               text={safeNote.text}
               onTextChange={onTextChange}
               onClose={() => onShowTextPanelChange(false)}
+              collapsed={notesCollapsed}
+              onToggleCollapsed={() => setNotesCollapsed((prev) => !prev)}
+              onHeaderPointerDown={isPhone ? undefined : handleNotesHeaderPointerDown}
+              onHeaderResizePointerDown={isPhone ? undefined : handleNotesResizePointerDown}
+              isDragging={isPhone ? false : isDraggingNotesPanel}
+              showResizeHandle={!isPhone}
             />
           </section>
         ) : null}
 
         {showGraphPanel ? (
-          <div className={`absolute top-3 z-20 w-[380px] max-w-[calc(100%-1.5rem)] ${showTextPanel ? "left-3" : "right-3"}`}>
+          <div
+            className="absolute z-20 max-w-[calc(100%-1.5rem)]"
+            style={{
+              left: isPhone ? "12px" : `${(graphPanelPosition ?? getDefaultGraphPanelPosition()).x}px`,
+              right: isPhone ? "12px" : undefined,
+              top: isPhone ? "12px" : `${(graphPanelPosition ?? getDefaultGraphPanelPosition()).y}px`,
+              width: isPhone ? undefined : `${graphPanelSize.width}px`,
+              height: isPhone
+                ? showTextPanel
+                  ? "42%"
+                  : "50%"
+                : `${graphPanelSize.height}px`,
+            }}
+          >
             <GraphPanel
               equations={graphEquations}
               onRemoveEquation={handleRemoveEquation}
               onClose={() => setShowGraphPanel(false)}
+              onHeaderPointerDown={isPhone ? undefined : handleGraphHeaderPointerDown}
+              onHeaderResizePointerDown={isPhone ? undefined : handleGraphResizePointerDown}
+              isDragging={isPhone ? false : isDraggingGraphPanel}
+              showResizeHandle={!isPhone}
             />
           </div>
         ) : null}

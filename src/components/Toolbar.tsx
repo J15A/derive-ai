@@ -19,7 +19,7 @@ import {
   Image,
   Package,
   Upload,
-  TextCursor,
+  ImageUp,
   LineChart
 } from "lucide-react";
 import { useState } from "react";
@@ -99,6 +99,7 @@ export function Toolbar({
   onImportBundle,
   onUploadImage,
 }: ToolbarProps): JSX.Element {
+  const coloredToolActiveClass = "bg-white shadow-[inset_0_0_0_2px_#cbd5e1] hover:bg-slate-50";
   const settingsRef = useRef<HTMLDetailsElement | null>(null);
   const [showPenMenu, setShowPenMenu] = useState(false);
   const [showHighlighterMenu, setShowHighlighterMenu] = useState(false);
@@ -130,9 +131,10 @@ export function Toolbar({
     };
   }, []);
 
+  const neutralToolActiveClass = "bg-white shadow-[inset_0_0_0_2px_#cbd5e1] hover:bg-slate-50";
   const toolButton = (name: InkTool, icon: JSX.Element) => (
     <button
-      className={`tool-btn ${tool === name ? "tool-btn-active" : ""}`}
+      className={`tool-btn ${tool === name ? (name === "eraser" || name === "pan" || name === "selector" ? neutralToolActiveClass : "tool-btn-active") : ""}`}
       type="button"
       onClick={() => onToolChange(name)}
       title={name.charAt(0).toUpperCase() + name.slice(1)}
@@ -154,8 +156,8 @@ export function Toolbar({
   };
 
   return (
-    <div className="flex min-w-0 items-center gap-2 border-b border-slate-100 p-3">
-      <div className="flex min-w-0 items-center gap-2">
+    <div className="flex min-w-0 items-center gap-2 border-b border-slate-100 p-3 max-sm:flex-wrap">
+      <div className="flex min-w-0 items-center gap-2 max-sm:w-full max-sm:overflow-x-auto max-sm:pb-1">
         {/* Pen with color dropdown */}
         <div 
           className="relative"
@@ -163,7 +165,7 @@ export function Toolbar({
           onMouseLeave={() => setShowPenMenu(false)}
         >
           <button
-            className={`tool-btn ${tool === "pen" ? "tool-btn-active" : ""}`}
+            className={`tool-btn ${tool === "pen" ? coloredToolActiveClass : ""}`}
             type="button"
             onClick={() => {
               onColorChange(penColor);
@@ -171,7 +173,7 @@ export function Toolbar({
             }}
             title="Pen"
           >
-            <Pen size={20} />
+            <Pen size={20} style={{ color: penColor }} />
           </button>
           
           {/* Color dropdown menu */}
@@ -209,20 +211,15 @@ export function Toolbar({
             </div>
           )}
         </div>
-        
-        {toolButton("eraser", <Eraser size={20} />)}
-        {toolButton("pan", <Hand size={20} />)}
-        {toolButton("selector", <SquareDashedMousePointer size={20} />)}
-        {toolButton("text", <TextCursor size={20} />)}
-        
+
         {/* Highlighter with color dropdown */}
-        <div 
+        <div
           className="relative"
           onMouseEnter={() => setShowHighlighterMenu(true)}
           onMouseLeave={() => setShowHighlighterMenu(false)}
         >
           <button
-            className={`tool-btn ${tool === "highlighter" ? "tool-btn-active" : ""}`}
+            className={`tool-btn ${tool === "highlighter" ? coloredToolActiveClass : ""}`}
             type="button"
             onClick={() => {
               onColorChange(highlighterColor);
@@ -230,10 +227,9 @@ export function Toolbar({
             }}
             title="Highlighter"
           >
-            <Highlighter size={20} />
+            <Highlighter size={20} style={{ color: highlighterColor }} />
           </button>
-          
-          {/* Color dropdown menu */}
+
           {showHighlighterMenu && (
             <div className="absolute left-0 top-10 z-50 flex flex-col gap-2 rounded-lg border border-slate-200 bg-white p-2 shadow-lg">
               <div className="flex gap-1">
@@ -241,7 +237,7 @@ export function Toolbar({
                   <button
                     key={c.value}
                     className="h-8 w-8 rounded-md border-2 transition-transform hover:scale-110"
-                    style={{ 
+                    style={{
                       backgroundColor: c.value,
                       borderColor: highlighterColor === c.value ? "#334155" : "transparent"
                     }}
@@ -269,6 +265,13 @@ export function Toolbar({
           )}
         </div>
         
+        {toolButton("eraser", <Eraser size={20} />)}
+        {toolButton("pan", <Hand size={20} />)}
+        {toolButton("selector", <SquareDashedMousePointer size={20} />)}
+        {/* Insert-text tool intentionally disabled for now. Keep this block commented for easy restore.
+        {toolButton("text", <TextCursor size={20} />)}
+        */}
+        
         <button 
           className="tool-btn"
           type="button" 
@@ -288,7 +291,7 @@ export function Toolbar({
         </button>
       </div>
 
-      <div className="ml-auto flex items-center gap-2">
+      <div className="ml-auto flex items-center gap-2 max-sm:ml-0 max-sm:w-full max-sm:justify-start max-sm:gap-1 max-sm:overflow-x-auto max-sm:pb-1">
         <button className="tool-btn" type="button" onClick={onZoomOut} title="Zoom Out">
           <ZoomOut size={20} />
         </button>
@@ -322,45 +325,62 @@ export function Toolbar({
         >
           <LineChart size={20} />
         </button>
-      </div>
+        <span className="w-14 shrink-0 text-center text-sm font-semibold text-slate-700">{zoomPercent}%</span>
+        <button 
+          className={`tool-btn ${isFullscreen ? "tool-btn-active" : ""}`}
+          type="button" 
+          onClick={onToggleFullscreen}
+          title={isFullscreen ? "Exit Fullscreen" : "Fullscreen"}
+        >
+          {isFullscreen ? <Minimize size={20} /> : <Maximize size={20} />}
+        </button>
 
-      <span className="w-14 text-center text-sm font-semibold text-slate-700">{zoomPercent}%</span>
-      <button 
-        className={`tool-btn ${isFullscreen ? "tool-btn-active" : ""}`}
-        type="button" 
-        onClick={onToggleFullscreen}
-        title={isFullscreen ? "Exit Fullscreen" : "Fullscreen"}
-      >
-        {isFullscreen ? <Minimize size={20} /> : <Maximize size={20} />}
-      </button>
+        <details className="group relative" ref={settingsRef}>
+          <summary className="tool-btn cursor-pointer list-none">
+            <Settings size={20} />
+          </summary>
 
-      <details className="group relative" ref={settingsRef}>
-        <summary className="tool-btn cursor-pointer list-none">
-          <Settings size={20} />
-        </summary>
-
-        <div className="absolute right-0 top-11 z-30 w-[320px] space-y-3 rounded-xl border border-slate-200 bg-white p-3 shadow-2xl">
-          <div>
-            <div className="grid grid-cols-3 gap-2">
-              <button className="btn flex flex-col items-center justify-center gap-1" type="button" onClick={onExportPng} title="Export PNG">
-                <Image size={18} />
-                <span className="text-xs">PNG</span>
-              </button>
-              <button className="btn flex flex-col items-center justify-center gap-1" type="button" onClick={onExportBundle} title="Export Bundle">
-                <Package size={18} />
-                <span className="text-xs">Bundle</span>
-              </button>
-              <label className="btn relative flex cursor-pointer flex-col items-center justify-center gap-1 overflow-hidden" title="Import Bundle">
-                <Upload size={18} />
-                <span className="text-xs">Import</span>
+          <div className="absolute right-0 top-11 z-30 w-[320px] space-y-3 rounded-xl border border-slate-200 bg-white p-3 shadow-2xl">
+            <div>
+              <div className="grid grid-cols-3 gap-2">
+                <button className="btn flex flex-col items-center justify-center gap-1" type="button" onClick={onExportPng} title="Export PNG">
+                  <Image size={18} />
+                  <span className="text-xs">PNG</span>
+                </button>
+                <button className="btn flex flex-col items-center justify-center gap-1" type="button" onClick={onExportBundle} title="Export Bundle">
+                  <Package size={18} />
+                  <span className="text-xs">Bundle</span>
+                </button>
+                <label className="btn relative flex cursor-pointer flex-col items-center justify-center gap-1 overflow-hidden" title="Import Bundle">
+                  <Upload size={18} />
+                  <span className="text-xs">Import</span>
+                  <input
+                    type="file"
+                    accept="application/json"
+                    className="absolute inset-0 cursor-pointer opacity-0"
+                    onChange={(e) => {
+                      const file = e.target.files?.[0];
+                      if (file) {
+                        onImportBundle(file);
+                        e.currentTarget.value = "";
+                      }
+                    }}
+                  />
+                </label>
+              </div>
+            </div>
+            <div className="border-t border-slate-200 pt-3">
+              <label className="btn relative flex w-full cursor-pointer items-center justify-center gap-2 overflow-hidden" title="Upload Image">
+                <ImageUp size={18} />
+                <span className="text-sm">Upload Image</span>
                 <input
                   type="file"
-                  accept="application/json"
+                  accept="image/*"
                   className="absolute inset-0 cursor-pointer opacity-0"
                   onChange={(e) => {
                     const file = e.target.files?.[0];
                     if (file) {
-                      onImportBundle(file);
+                      onUploadImage(file);
                       e.currentTarget.value = "";
                     }
                   }}
@@ -368,26 +388,8 @@ export function Toolbar({
               </label>
             </div>
           </div>
-          <div className="border-t border-slate-200 pt-3">
-            <label className="btn relative flex w-full cursor-pointer items-center justify-center gap-2 overflow-hidden" title="Upload Image">
-              <Image size={18} />
-              <span className="text-sm">Upload Image</span>
-              <input
-                type="file"
-                accept="image/*"
-                className="absolute inset-0 cursor-pointer opacity-0"
-                onChange={(e) => {
-                  const file = e.target.files?.[0];
-                  if (file) {
-                    onUploadImage(file);
-                    e.currentTarget.value = "";
-                  }
-                }}
-              />
-            </label>
-          </div>
-        </div>
-      </details>
+        </details>
+      </div>
     </div>
   );
 }

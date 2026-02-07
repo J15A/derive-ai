@@ -15,6 +15,13 @@ export interface InkStroke {
   points: InkPoint[];
 }
 
+export interface InkHistoryAction {
+  type: "addStroke" | "erase";
+  strokes: InkStroke[];
+  textAnnotations?: TextAnnotation[];
+  timestamp: number;
+}
+
 export interface WhiteboardImage {
   id: string;
   dataUrl: string;
@@ -59,6 +66,8 @@ export interface Note {
   images: WhiteboardImage[];
   undoneStrokes: InkStroke[];
   textAnnotations: TextAnnotation[];
+  undoHistory: InkHistoryAction[];
+  redoHistory: InkHistoryAction[];
   viewport: CanvasViewport;
   createdAt: number;
   updatedAt: number;

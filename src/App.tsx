@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState, useTransition } from "react";
-import { ChevronRight } from "lucide-react";
+import { ChevronLeft, ChevronRight } from "lucide-react";
 import { loadNotesFromDb, saveNotesToDb } from "./api/client";
 import { NoteEditor } from "./components/NoteEditor";
 import { Sidebar } from "./components/Sidebar";
@@ -56,7 +56,12 @@ export default function App(): JSX.Element {
 
   const [isPending, startTransition] = useTransition();
   const [uiSettingsReady, setUiSettingsReady] = useState(false);
-  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const [sidebarCollapsed, setSidebarCollapsed] = useState<boolean>(() =>
+    typeof window !== "undefined" ? window.matchMedia("(max-width: 639px)").matches : false,
+  );
+  const [isPhone, setIsPhone] = useState<boolean>(() =>
+    typeof window !== "undefined" ? window.matchMedia("(max-width: 639px)").matches : false,
+  );
   const selectedNote = useMemo(() => {
     if (!selectedNoteId) {
       return notes[0] ?? null;
@@ -69,7 +74,10 @@ export default function App(): JSX.Element {
     startTransition(() => {
       createNote();
     });
-  }, [createNote, startTransition]);
+    if (isPhone) {
+      setSidebarCollapsed(true);
+    }
+  }, [createNote, isPhone, startTransition]);
 
   useEffect(() => {
     const raw = window.localStorage.getItem(UI_SETTINGS_KEY);
@@ -190,6 +198,25 @@ export default function App(): JSX.Element {
   }, [handleCreateNote, redoInk, undoInk]);
 
   useEffect(() => {
+    const mediaQuery = window.matchMedia("(max-width: 639px)");
+    const handleChange = (event: MediaQueryListEvent) => {
+      setIsPhone(event.matches);
+      if (event.matches) {
+        // On phone, keep notes list/search on a separate screen opened explicitly via the side button.
+        setSidebarCollapsed(true);
+      }
+    };
+    setIsPhone(mediaQuery.matches);
+    if (mediaQuery.matches) {
+      setSidebarCollapsed(true);
+    }
+    mediaQuery.addEventListener("change", handleChange);
+    return () => {
+      mediaQuery.removeEventListener("change", handleChange);
+    };
+  }, []);
+
+  useEffect(() => {
     if (!selectedNoteId && notes.length > 0) {
       selectNote(notes[0].id);
     }
@@ -201,14 +228,21 @@ export default function App(): JSX.Element {
         sidebarCollapsed ? "md:grid-cols-1" : "md:grid-cols-[300px_1fr]"
       }`}>
         {!sidebarCollapsed && (
-          <div className="relative h-full">
+          <div
+            className={`relative h-full ${isPhone ? "fixed inset-0 z-[70] bg-panel" : ""}`}
+          >
             <Sidebar
               notes={notes}
               selectedNoteId={selectedNote?.id ?? null}
               searchQuery={searchQuery}
               isCollapsed={sidebarCollapsed}
               onSearch={setSearchQuery}
-              onSelect={selectNote}
+              onSelect={(id) => {
+                selectNote(id);
+                if (isPhone) {
+                  setSidebarCollapsed(true);
+                }
+              }}
               onCreate={handleCreateNote}
               onRename={renameNote}
               onDelete={deleteNote}
@@ -217,10 +251,21 @@ export default function App(): JSX.Element {
           </div>
         )}
         
-        {sidebarCollapsed && (
+        {isPhone ? (
+          <button
+            onClick={() => setSidebarCollapsed((prev) => !prev)}
+            className="fixed left-0 top-1/2 z-[90] flex h-16 w-7 -translate-y-1/2 items-center justify-center rounded-r-2xl border border-l-0 border-slate-200 bg-panel text-slate-500 shadow-soft transition-all duration-200 hover:w-8 hover:bg-slate-50 hover:text-slate-700"
+            title={sidebarCollapsed ? "Open notes" : "Close notes"}
+            type="button"
+          >
+            {sidebarCollapsed ? <ChevronRight size={16} /> : <ChevronLeft size={16} />}
+          </button>
+        ) : null}
+
+        {!isPhone && sidebarCollapsed && (
           <button
             onClick={() => setSidebarCollapsed(false)}
-            className="fixed left-0 top-1/2 z-50 hidden h-24 w-8 -translate-y-1/2 items-center justify-center rounded-r-2xl border border-l-0 border-slate-200 bg-panel text-slate-500 shadow-soft transition-all duration-200 hover:w-10 hover:bg-slate-50 hover:text-slate-700 md:flex"
+            className="fixed left-0 top-1/2 z-[80] flex h-24 w-8 -translate-y-1/2 items-center justify-center rounded-r-2xl border border-l-0 border-slate-200 bg-panel text-slate-500 shadow-soft transition-all duration-200 hover:w-10 hover:bg-slate-50 hover:text-slate-700"
             title="Open sidebar"
             type="button"
           >

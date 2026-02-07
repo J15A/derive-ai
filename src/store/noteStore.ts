@@ -1,5 +1,5 @@
 import { create } from "zustand";
-import type { InkStroke, InkTool, Note, NoteBundle, TextAnnotation, WhiteboardImage } from "../types";
+import type { InkHistoryAction, InkStroke, InkTool, Note, NoteBundle, TextAnnotation, WhiteboardImage } from "../types";
 import { strokeIntersectsCircle, strokesToPngDataUrl, uid } from "../utils/ink";
 
 const now = () => Date.now();
@@ -14,6 +14,8 @@ function createNote(title = "Untitled Note"): Note {
     images: [],
     undoneStrokes: [],
     textAnnotations: [],
+    undoHistory: [],
+    redoHistory: [],
     viewport: { offsetX: 0, offsetY: 0, scale: 1 },
     createdAt: timestamp,
     updatedAt: timestamp,
@@ -89,6 +91,8 @@ export const useNoteStore = create<NoteState>((set, get) => ({
     const normalized = notes.map((note) => ({
       ...note,
       textAnnotations: note.textAnnotations ?? [],
+      undoHistory: [],
+      redoHistory: [],
       viewport: {
         offsetX: note.viewport?.offsetX ?? 0,
         offsetY: note.viewport?.offsetY ?? 0,
@@ -160,6 +164,12 @@ export const useNoteStore = create<NoteState>((set, get) => ({
   setShowGrid: (show) => set({ showGrid: show }),
   setShowTextPanel: (show) => set({ showTextPanel: show }),
   appendStroke: (noteId, stroke) => {
+    const actionTimestamp = now();
+    const historyAction: InkHistoryAction = {
+      type: "addStroke",
+      strokes: [stroke],
+      timestamp: actionTimestamp,
+    };
     set((state) => ({
       notes: state.notes.map((note) =>
         note.id === noteId
@@ -167,6 +177,8 @@ export const useNoteStore = create<NoteState>((set, get) => ({
               ...note,
               strokes: [...note.strokes, stroke],
               undoneStrokes: [],
+              undoHistory: [...(note.undoHistory ?? []), historyAction],
+              redoHistory: [],
               updatedAt: now(),
             }
           : note,
@@ -180,11 +192,11 @@ export const useNoteStore = create<NoteState>((set, get) => ({
           return note;
         }
         
-        // Filter out strokes that intersect with the eraser
+        const erasedStrokes = note.strokes.filter((stroke) => strokeIntersectsCircle(stroke, x, y, radius));
         const filteredStrokes = note.strokes.filter((stroke) => !strokeIntersectsCircle(stroke, x, y, radius));
         
         // Filter out text annotations that intersect with the eraser
-        const filteredAnnotations = (note.textAnnotations ?? []).filter((annotation) => {
+        const erasedAnnotations = (note.textAnnotations ?? []).filter((annotation) => {
           // Check if eraser circle intersects with text annotation bounding box
           // Account for multiline text
           const lines = annotation.text.split('\n');
@@ -201,21 +213,62 @@ export const useNoteStore = create<NoteState>((set, get) => ({
           const distanceY = y - closestY;
           const distanceSquared = distanceX * distanceX + distanceY * distanceY;
           
-          // Return true to keep (not erase), false to erase
-          return distanceSquared > radius * radius;
+          return distanceSquared <= radius * radius;
         });
+
+        const filteredAnnotations = (note.textAnnotations ?? []).filter(
+          (annotation) => !erasedAnnotations.some((erased) => erased.id === annotation.id),
+        );
         
         if (filteredStrokes.length === note.strokes.length && 
             filteredAnnotations.length === (note.textAnnotations ?? []).length) {
           return note;
         }
         
+        const actionTimestamp = now();
+        const lastAction = note.undoHistory[note.undoHistory.length - 1];
+        const shouldMergeWithPreviousErase =
+          lastAction?.type === "erase" && actionTimestamp - lastAction.timestamp < 250;
+
+        const nextUndoHistory: InkHistoryAction[] = shouldMergeWithPreviousErase
+          ? [
+              ...note.undoHistory.slice(0, -1),
+              {
+                type: "erase" as const,
+                strokes: [
+                  ...lastAction.strokes,
+                  ...erasedStrokes.filter(
+                    (stroke) => !lastAction.strokes.some((existing) => existing.id === stroke.id),
+                  ),
+                ],
+                textAnnotations: [
+                  ...(lastAction.textAnnotations ?? []),
+                  ...erasedAnnotations.filter(
+                    (annotation) =>
+                      !(lastAction.textAnnotations ?? []).some((existing) => existing.id === annotation.id),
+                  ),
+                ],
+                timestamp: actionTimestamp,
+              },
+            ]
+          : [
+              ...note.undoHistory,
+              {
+                type: "erase" as const,
+                strokes: erasedStrokes,
+                textAnnotations: erasedAnnotations,
+                timestamp: actionTimestamp,
+              },
+            ];
+
         return {
           ...note,
           strokes: filteredStrokes,
           textAnnotations: filteredAnnotations,
           undoneStrokes: [],
-          updatedAt: now(),
+          undoHistory: nextUndoHistory,
+          redoHistory: [],
+          updatedAt: actionTimestamp,
         };
       }),
     }));
@@ -430,14 +483,31 @@ export const useNoteStore = create<NoteState>((set, get) => ({
     }
     set((state) => ({
       notes: state.notes.map((note) => {
-        if (note.id !== selectedId || note.strokes.length === 0) {
+        const undoHistory = note.undoHistory ?? [];
+        if (note.id !== selectedId || undoHistory.length === 0) {
           return note;
         }
-        const last = note.strokes[note.strokes.length - 1];
+
+        const action = undoHistory[undoHistory.length - 1];
+        let nextStrokes = note.strokes;
+        let nextAnnotations = note.textAnnotations ?? [];
+
+        if (action.type === "addStroke") {
+          const actionStrokeIds = new Set(action.strokes.map((stroke) => stroke.id));
+          nextStrokes = note.strokes.filter((stroke) => !actionStrokeIds.has(stroke.id));
+        } else if (action.type === "erase") {
+          nextStrokes = [...note.strokes, ...action.strokes];
+          const erasedAnnotations = action.textAnnotations ?? [];
+          nextAnnotations = [...(note.textAnnotations ?? []), ...erasedAnnotations];
+        }
+
         return {
           ...note,
-          strokes: note.strokes.slice(0, -1),
-          undoneStrokes: [...note.undoneStrokes, last],
+          strokes: nextStrokes,
+          textAnnotations: nextAnnotations,
+          undoneStrokes: [],
+          undoHistory: undoHistory.slice(0, -1),
+          redoHistory: [...(note.redoHistory ?? []), action],
           updatedAt: now(),
         };
       }),
@@ -450,14 +520,34 @@ export const useNoteStore = create<NoteState>((set, get) => ({
     }
     set((state) => ({
       notes: state.notes.map((note) => {
-        if (note.id !== selectedId || note.undoneStrokes.length === 0) {
+        const redoHistory = note.redoHistory ?? [];
+        if (note.id !== selectedId || redoHistory.length === 0) {
           return note;
         }
-        const redoStroke = note.undoneStrokes[note.undoneStrokes.length - 1];
+
+        const action = redoHistory[redoHistory.length - 1];
+        let nextStrokes = note.strokes;
+        let nextAnnotations = note.textAnnotations ?? [];
+
+        if (action.type === "addStroke") {
+          nextStrokes = [...note.strokes, ...action.strokes];
+        } else if (action.type === "erase") {
+          const erasedStrokeIds = new Set(action.strokes.map((stroke) => stroke.id));
+          nextStrokes = note.strokes.filter((stroke) => !erasedStrokeIds.has(stroke.id));
+
+          const erasedAnnotationIds = new Set((action.textAnnotations ?? []).map((annotation) => annotation.id));
+          nextAnnotations = (note.textAnnotations ?? []).filter(
+            (annotation) => !erasedAnnotationIds.has(annotation.id),
+          );
+        }
+
         return {
           ...note,
-          strokes: [...note.strokes, redoStroke],
-          undoneStrokes: note.undoneStrokes.slice(0, -1),
+          strokes: nextStrokes,
+          textAnnotations: nextAnnotations,
+          undoneStrokes: [],
+          undoHistory: [...(note.undoHistory ?? []), action],
+          redoHistory: redoHistory.slice(0, -1),
           updatedAt: now(),
         };
       }),
@@ -471,7 +561,15 @@ export const useNoteStore = create<NoteState>((set, get) => ({
     set((state) => ({
       notes: state.notes.map((note) =>
         note.id === selectedId
-          ? { ...note, strokes: [], undoneStrokes: [], updatedAt: now() }
+          ? {
+              ...note,
+              strokes: [],
+              textAnnotations: [],
+              undoneStrokes: [],
+              undoHistory: [],
+              redoHistory: [],
+              updatedAt: now(),
+            }
           : note,
       ),
     }));
@@ -537,6 +635,8 @@ export const useNoteStore = create<NoteState>((set, get) => ({
       images: bundle.note.images || [],
       undoneStrokes: [],
       textAnnotations: [],
+      undoHistory: [],
+      redoHistory: [],
       viewport: { offsetX: 0, offsetY: 0, scale: 1 },
       createdAt: stamp,
       updatedAt: stamp,
