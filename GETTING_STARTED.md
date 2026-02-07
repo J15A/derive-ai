@@ -21,7 +21,17 @@ cd ..
 VITE_API_URL=http://localhost:3001/api
 ```
 
-**Backend** - The `server/.env` file is already configured with MongoDB Atlas.
+**Backend** - Copy the example and configure `server/.env`:
+```bash
+cp server/.env.example server/.env
+```
+
+Edit `server/.env` with your MongoDB Atlas connection string:
+```env
+PORT=3001
+MONGODB_URI=your-mongodb-atlas-connection-string
+NODE_ENV=development
+```
 
 ### 3. Start the Application
 
@@ -48,9 +58,10 @@ Open your browser to **http://localhost:5173**
 
 ### Backend (Node.js + Express + MongoDB Atlas)
 - REST API for notes CRUD operations
-- MongoDB Atlas cloud database (already configured)
+- MongoDB Atlas cloud database
 - Automatic data persistence
 - Health check endpoint
+- Environment-based configuration
 
 ### Frontend (React + TypeScript + Vite)
 - Pen-first note editor with pressure sensitivity
@@ -71,17 +82,20 @@ Open your browser to **http://localhost:5173**
 ## Troubleshooting
 
 **Backend won't start?**
-- Check that `server/.env` has valid MongoDB connection string
-- Verify Node.js version is 18+
+- Check that you've created `server/.env` from `server/.env.example`
+- Verify MongoDB Atlas connection string is valid
+- Confirm Node.js version is 18+
+- Check that port 3001 is not in use
 
 **Frontend can't connect?**
 - Verify backend is running on port 3001
 - Check `.env` has correct `VITE_API_URL`
 
 **MongoDB connection errors?**
-- Verify MongoDB Atlas cluster is active
-- Check your IP is whitelisted in MongoDB Atlas
-- Confirm database credentials are correct
+- Verify MongoDB Atlas cluster is active at [cloud.mongodb.com](https://cloud.mongodb.com)
+- Check your IP is whitelisted in MongoDB Atlas Network Access settings
+- Confirm database credentials are correct in `server/.env`
+- Ensure connection string format is correct
 
 ## Need Help?
 

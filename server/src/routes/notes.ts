@@ -1,5 +1,5 @@
 import { Router, Request, Response } from "express";
-import { getNotesCollection } from "../db.js";
+import { getNotesCollection } from "../mongodb.js";
 import type { Note } from "../types.js";
 
 const router = Router();

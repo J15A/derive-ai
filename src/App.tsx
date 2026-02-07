@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState, useTransition } from "react";
-import { loadNotesFromDb, saveNotesToDb } from "./db/database";
+import { loadNotesFromDb, saveNotesToDb } from "./api/client";
 import { NoteEditor } from "./components/NoteEditor";
 import { Sidebar } from "./components/Sidebar";
 import { useNoteStore } from "./store/noteStore";

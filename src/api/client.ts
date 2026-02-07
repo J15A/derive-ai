@@ -1,3 +1,11 @@
+/**
+ * API Client (Frontend)
+ * 
+ * Provides functions to interact with the backend REST API.
+ * All requests are sent to the Express server which handles
+ * communication with MongoDB.
+ */
+
 import type { Note } from "../types";
 
 const API_BASE_URL = import.meta.env.VITE_API_URL || "http://localhost:3001/api";

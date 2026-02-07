@@ -1,7 +1,7 @@
 import express from "express";
 import cors from "cors";
 import dotenv from "dotenv";
-import { connectToDatabase, closeDatabase } from "./db.js";
+import { connectToDatabase, closeDatabase } from "./mongodb.js";
 import notesRouter from "./routes/notes.js";
 
 dotenv.config();

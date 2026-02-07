@@ -1,8 +1,8 @@
 # Derive AI Notebook
 
-**🚀 Quick Start**: See [GETTING_STARTED.md](./GETTING_STARTED.md) to get up and running in 2 minutes!
+Pen-first note taking app built with React 18 + TypeScript + Vite + Tailwind CSS with MongoDB Atlas backend.
 
-Pen-first note taking app built with React 18 + TypeScript + Vite + Tailwind CSS with MongoDB backend.
+**🚀 Quick Start**: See [GETTING_STARTED.md](./GETTING_STARTED.md) for setup instructions.
 
 ## Features
 
@@ -29,7 +29,7 @@ Pen-first note taking app built with React 18 + TypeScript + Vite + Tailwind CSS
 ### Prerequisites
 
 - Node.js (v18 or higher)
-- MongoDB Atlas account (or local MongoDB)
+- MongoDB Atlas account (free tier available at [mongodb.com/cloud/atlas](https://mongodb.com/cloud/atlas))
 
 ### Backend Setup
 
@@ -42,11 +42,17 @@ npm install
 
 2. **Configure MongoDB connection**:
 
-The `.env` file is already configured with MongoDB Atlas. To use your own database, update `server/.env`:
+Copy the example environment file and add your MongoDB Atlas connection string to `server/.env`:
+
+```bash
+cp server/.env.example server/.env
+```
+
+Update the `MONGODB_URI` in `server/.env`:
 
 ```env
 PORT=3001
-MONGODB_URI=your-mongodb-connection-string
+MONGODB_URI=your-mongodb-atlas-connection-string
 NODE_ENV=development
 ```
 
@@ -112,8 +118,8 @@ npm run preview
   - `TextEditor.tsx`
 - `src/store`
   - `noteStore.ts` (Zustand state + actions)
-- `src/db`
-  - `database.ts` (API client for MongoDB backend)
+- `src/api`
+  - `client.ts` (REST API client for backend communication)
 - `src/utils`
   - `ink.ts` (stroke geometry, smoothing pipeline, export helpers)
 - `src/types.ts`
@@ -121,7 +127,7 @@ npm run preview
 ### Backend
 - `server/src`
   - `index.ts` (Express server setup)
-  - `db.ts` (MongoDB connection)
+  - `mongodb.ts` (MongoDB connection manager)
   - `routes/notes.ts` (REST API endpoints)
   - `types.ts` (Shared TypeScript types)
 

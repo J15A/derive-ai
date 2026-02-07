@@ -1,3 +1,10 @@
+/**
+ * MongoDB Connection Manager (Backend)
+ * 
+ * Handles the connection to MongoDB Atlas and provides
+ * access to the database and collections.
+ */
+
 import { MongoClient, Db, Collection } from "mongodb";
 import type { Note } from "./types.js";
 
