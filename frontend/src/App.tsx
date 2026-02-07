@@ -1,11 +1,35 @@
 import { useCallback, useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { ChevronLeft, ChevronRight } from "lucide-react";
-import { loadNotesFromDb, saveNotesToDb } from "./api/client";
 import { NoteEditor } from "./components/NoteEditor";
 import { Sidebar } from "./components/Sidebar";
 import { useNoteStore } from "./store/noteStore";
+import type { Note } from "./types";
 
 const UI_SETTINGS_KEY = "deriveAiUiSettings";
+const NOTES_STORAGE_KEY = "deriveAiNotes";
+
+// Local storage helper functions
+function loadNotesFromLocalStorage(): Note[] {
+  try {
+    const stored = localStorage.getItem(NOTES_STORAGE_KEY);
+    if (!stored) {
+      return [];
+    }
+    const parsed = JSON.parse(stored);
+    return Array.isArray(parsed) ? parsed : [];
+  } catch (error) {
+    console.error("Failed to load notes from localStorage:", error);
+    return [];
+  }
+}
+
+function saveNotesToLocalStorage(notes: Note[]): void {
+  try {
+    localStorage.setItem(NOTES_STORAGE_KEY, JSON.stringify(notes));
+  } catch (error) {
+    console.error("Failed to save notes to localStorage:", error);
+  }
+}
 
 export default function App(): JSX.Element {
   const {
@@ -139,14 +163,14 @@ export default function App(): JSX.Element {
     );
   }, [color, showGrid, showTextPanel, penSize, highlighterSize, tool, uiSettingsReady]);
 
+  // Load notes from localStorage on mount
   useEffect(() => {
-    loadNotesFromDb()
-      .then((loaded) => {
-        setNotes(loaded);
-      })
-      .finally(() => setHydrated(true));
+    const loaded = loadNotesFromLocalStorage();
+    setNotes(loaded);
+    setHydrated(true);
   }, [setHydrated, setNotes]);
 
+  // Save notes to localStorage whenever they change
   useEffect(() => {
     if (!hydrated) {
       return;
@@ -157,9 +181,7 @@ export default function App(): JSX.Element {
     }
 
     saveTimerRef.current = window.setTimeout(() => {
-      saveNotesToDb(notes).catch((error: unknown) => {
-        console.error("Failed to save notes", error);
-      });
+      saveNotesToLocalStorage(notes);
     }, 450);
 
     return () => {
