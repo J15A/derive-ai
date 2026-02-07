@@ -20,6 +20,7 @@ import {
   Package,
   Upload,
   ImageUp,
+  TextCursor,
   LineChart
 } from "lucide-react";
 import { useState } from "react";
@@ -268,9 +269,7 @@ export function Toolbar({
         {toolButton("eraser", <Eraser size={20} />)}
         {toolButton("pan", <Hand size={20} />)}
         {toolButton("selector", <SquareDashedMousePointer size={20} />)}
-        {/* Insert-text tool intentionally disabled for now. Keep this block commented for easy restore.
         {toolButton("text", <TextCursor size={20} />)}
-        */}
         
         <button 
           className="tool-btn"

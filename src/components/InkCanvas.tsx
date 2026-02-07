@@ -77,9 +77,8 @@ export function InkCanvas({
   const [popupPosition, setPopupPosition] = useState<{ x: number; y: number }>({ x: 0, y: 0 });
   const [isSolving, setIsSolving] = useState(false);
   const [isGraphing, setIsGraphing] = useState(false);
-  // Insert-text feature intentionally disabled for now. Keep these states commented for easy restore.
-  // const [textInput, setTextInput] = useState<{ x: number; y: number; worldX: number; worldY: number } | null>(null);
-  // const [textValue, setTextValue] = useState("");
+  const [textInput, setTextInput] = useState<{ x: number; y: number; worldX: number; worldY: number } | null>(null);
+  const [textValue, setTextValue] = useState("");
   const [loadedImages, setLoadedImages] = useState<Map<string, HTMLImageElement>>(new Map());
 
   const drawScene = useCallback(() => {
@@ -608,14 +607,13 @@ export function InkCanvas({
       return;
     }
     
-    // Insert-text feature intentionally disabled for now. Keep this block commented for easy restore.
-    // if (tool === "text") {
-    //   const point = toWorldPoint(e.clientX, e.clientY);
-    //   const canvasPoint = getCanvasSpacePoint(e.clientX, e.clientY);
-    //   setTextInput({ x: canvasPoint.x, y: canvasPoint.y, worldX: point.x, worldY: point.y });
-    //   setTextValue("");
-    //   return;
-    // }
+    if (tool === "text") {
+      const point = toWorldPoint(e.clientX, e.clientY);
+      const canvasPoint = getCanvasSpacePoint(e.clientX, e.clientY);
+      setTextInput({ x: canvasPoint.x, y: canvasPoint.y, worldX: point.x, worldY: point.y });
+      setTextValue("");
+      return;
+    }
     
     if (tool === "selector") {
       const point = toWorldPoint(e.clientX, e.clientY);
@@ -1083,51 +1081,44 @@ export function InkCanvas({
     setShowPopup(false);
   };
 
-  // Insert-text feature intentionally disabled for now. Keep these handlers commented for easy restore.
-  // const handleTextSubmit = async () => {
-  //   console.log("handleTextSubmit called", { textInput, textValue });
-  //
-  //   if (!textInput || !textValue.trim()) {
-  //     setTextInput(null);
-  //     setTextValue("");
-  //     return;
-  //   }
-  //
-  //   try {
-  //     const fontSize = 48;
-  //     console.log("Converting text to strokes...", textValue);
-  //     const strokes = await textToStrokes(textValue, textInput.worldX, textInput.worldY, fontSize, color);
-  //     console.log("Generated strokes:", strokes.length);
-  //
-  //     for (const stroke of strokes) {
-  //       onAppendStroke(note.id, stroke);
-  //     }
-  //
-  //     setTextInput(null);
-  //     setTextValue("");
-  //   } catch (error) {
-  //     console.error("Failed to convert text to strokes:", error);
-  //     setTextInput(null);
-  //     setTextValue("");
-  //   }
-  // };
-  //
-  // const handleTextKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
-  //   if (e.key === "Enter") {
-  //     e.preventDefault();
-  //     handleTextSubmit();
-  //   } else if (e.key === "Escape") {
-  //     setTextInput(null);
-  //     setTextValue("");
-  //   }
-  // };
+  const handleTextSubmit = () => {
+    if (!textInput || !textValue.trim()) {
+      setTextInput(null);
+      setTextValue("");
+      return;
+    }
+
+    const annotation: TextAnnotation = {
+      id: uid(),
+      x: textInput.worldX,
+      y: textInput.worldY,
+      text: textValue.trim(),
+      fontSize: 56,
+      color,
+    };
+
+    onAddTextAnnotation(note.id, annotation);
+    setTextInput(null);
+    setTextValue("");
+    scheduleDraw();
+  };
+
+  const handleTextKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === "Enter") {
+      e.preventDefault();
+      handleTextSubmit();
+    } else if (e.key === "Escape") {
+      setTextInput(null);
+      setTextValue("");
+    }
+  };
 
   return (
     <div className="relative h-full min-h-0 w-full overflow-hidden rounded-b-2xl bg-slate-50" ref={containerRef}>
       <canvas
         ref={canvasRef}
         className="block h-full w-full touch-none"
-        style={{ cursor: tool === "pan" ? "grab" : tool === "eraser" ? "cell" : tool === "selector" ? "default" : "crosshair" }}
+        style={{ cursor: tool === "pan" ? "grab" : tool === "eraser" ? "cell" : tool === "selector" ? "default" : tool === "text" ? "text" : "crosshair" }}
         onPointerDown={handlePointerDown}
         onPointerMove={handlePointerMove}
         onPointerUp={handlePointerUp}
@@ -1149,7 +1140,6 @@ export function InkCanvas({
         />
       )}
       
-      {/* Insert-text feature intentionally disabled for now. Keep this block commented for easy restore.
       {textInput && (
         <div
           className="absolute z-50"
@@ -1172,7 +1162,6 @@ export function InkCanvas({
           />
         </div>
       )}
-      */}
     </div>
   );
 }
