@@ -16,9 +16,18 @@ export interface InkStroke {
 }
 
 export interface InkHistoryAction {
-  type: "addStroke" | "erase";
+  type:
+    | "addStroke"
+    | "erase"
+    | "addTextAnnotation"
+    | "addImage"
+    | "deleteImages"
+    | "transformImages";
   strokes: InkStroke[];
   textAnnotations?: TextAnnotation[];
+  images?: WhiteboardImage[];
+  beforeImages?: WhiteboardImage[];
+  afterImages?: WhiteboardImage[];
   timestamp: number;
 }
 

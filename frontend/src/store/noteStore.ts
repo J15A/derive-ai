@@ -73,6 +73,34 @@ interface NoteState {
 
 const MIN_ZOOM = 0.25;
 const MAX_ZOOM = 6;
+const IMAGE_TRANSFORM_MERGE_WINDOW_MS = 250;
+
+function sameImageIdSet(a: WhiteboardImage[] | undefined, b: WhiteboardImage[] | undefined): boolean {
+  if (!a || !b || a.length !== b.length) {
+    return false;
+  }
+  const ids = new Set(a.map((image) => image.id));
+  return b.every((image) => ids.has(image.id));
+}
+
+function applyImageSnapshot(images: WhiteboardImage[], snapshot: WhiteboardImage[] | undefined): WhiteboardImage[] {
+  if (!snapshot || snapshot.length === 0) {
+    return images;
+  }
+  const imageMap = new Map(snapshot.map((image) => [image.id, image]));
+  return images.map((image) => imageMap.get(image.id) ?? image);
+}
+
+function appendMissingImages(images: WhiteboardImage[], additions: WhiteboardImage[] | undefined): WhiteboardImage[] {
+  if (!additions || additions.length === 0) {
+    return images;
+  }
+  const existingIds = new Set(images.map((image) => image.id));
+  return [
+    ...images,
+    ...additions.filter((image) => !existingIds.has(image.id)),
+  ];
+}
 
 export const useNoteStore = create<NoteState>((set, get) => ({
   notes: [],
@@ -377,55 +405,130 @@ export const useNoteStore = create<NoteState>((set, get) => ({
     }));
   },
   addTextAnnotation: (noteId, annotation) => {
+    const actionTimestamp = now();
+    const historyAction: InkHistoryAction = {
+      type: "addTextAnnotation",
+      strokes: [],
+      textAnnotations: [annotation],
+      timestamp: actionTimestamp,
+    };
     set((state) => ({
       notes: state.notes.map((note) =>
         note.id === noteId
           ? {
               ...note,
               textAnnotations: [...(note.textAnnotations ?? []), annotation],
-              updatedAt: now(),
+              undoHistory: [...(note.undoHistory ?? []), historyAction],
+              redoHistory: [],
+              updatedAt: actionTimestamp,
             }
           : note,
       ),
     }));
   },
   addImage: (noteId, image) => {
+    const actionTimestamp = now();
+    const historyAction: InkHistoryAction = {
+      type: "addImage",
+      strokes: [],
+      images: [image],
+      timestamp: actionTimestamp,
+    };
     set((state) => ({
       notes: state.notes.map((note) =>
         note.id === noteId
-          ? { ...note, images: [...note.images, image], updatedAt: now() }
+          ? {
+              ...note,
+              images: [...note.images, image],
+              undoHistory: [...(note.undoHistory ?? []), historyAction],
+              redoHistory: [],
+              updatedAt: actionTimestamp,
+            }
           : note,
       ),
     }));
   },
   deleteImages: (noteId, imageIds) => {
     set((state) => ({
-      notes: state.notes.map((note) =>
-        note.id === noteId
-          ? {
-              ...note,
-              images: note.images.filter((img) => !imageIds.includes(img.id)),
-              updatedAt: now(),
-            }
-          : note,
-      ),
+      notes: state.notes.map((note) => {
+        if (note.id !== noteId) {
+          return note;
+        }
+
+        const deletedImages = note.images.filter((image) => imageIds.includes(image.id));
+        if (deletedImages.length === 0) {
+          return note;
+        }
+
+        const actionTimestamp = now();
+        const historyAction: InkHistoryAction = {
+          type: "deleteImages",
+          strokes: [],
+          images: deletedImages,
+          timestamp: actionTimestamp,
+        };
+
+        return {
+          ...note,
+          images: note.images.filter((image) => !imageIds.includes(image.id)),
+          undoHistory: [...(note.undoHistory ?? []), historyAction],
+          redoHistory: [],
+          updatedAt: actionTimestamp,
+        };
+      }),
     }));
   },
   moveImages: (noteId, imageIds, dx, dy) => {
     set((state) => ({
-      notes: state.notes.map((note) =>
-        note.id === noteId
+      notes: state.notes.map((note) => {
+        if (note.id !== noteId || (dx === 0 && dy === 0)) {
+          return note;
+        }
+
+        const beforeImages = note.images.filter((image) => imageIds.includes(image.id));
+        if (beforeImages.length === 0) {
+          return note;
+        }
+
+        const actionTimestamp = now();
+        const movedMap = new Map(
+          beforeImages.map((image) => [image.id, { ...image, x: image.x + dx, y: image.y + dy }]),
+        );
+        const nextImages = note.images.map((image) => movedMap.get(image.id) ?? image);
+        const afterImages = nextImages.filter((image) => imageIds.includes(image.id));
+
+        const lastAction = note.undoHistory[note.undoHistory.length - 1];
+        const shouldMerge =
+          lastAction?.type === "transformImages"
+          && actionTimestamp - lastAction.timestamp < IMAGE_TRANSFORM_MERGE_WINDOW_MS
+          && sameImageIdSet(lastAction.afterImages, beforeImages);
+
+        const historyAction: InkHistoryAction = shouldMerge
           ? {
-              ...note,
-              images: note.images.map((img) =>
-                imageIds.includes(img.id)
-                  ? { ...img, x: img.x + dx, y: img.y + dy }
-                  : img,
-              ),
-              updatedAt: now(),
+              type: "transformImages",
+              strokes: [],
+              beforeImages: lastAction.beforeImages ?? beforeImages,
+              afterImages,
+              timestamp: actionTimestamp,
             }
-          : note,
-      ),
+          : {
+              type: "transformImages",
+              strokes: [],
+              beforeImages,
+              afterImages,
+              timestamp: actionTimestamp,
+            };
+
+        return {
+          ...note,
+          images: nextImages,
+          undoHistory: shouldMerge
+            ? [...note.undoHistory.slice(0, -1), historyAction]
+            : [...note.undoHistory, historyAction],
+          redoHistory: [],
+          updatedAt: actionTimestamp,
+        };
+      }),
     }));
   },
   scaleStrokes: (noteId, strokeIds, scale, centerX, centerY) => {
@@ -455,25 +558,64 @@ export const useNoteStore = create<NoteState>((set, get) => ({
   },
   scaleImages: (noteId, imageIds, scale, centerX, centerY) => {
     set((state) => ({
-      notes: state.notes.map((note) =>
-        note.id === noteId
+      notes: state.notes.map((note) => {
+        if (note.id !== noteId || scale === 1) {
+          return note;
+        }
+
+        const beforeImages = note.images.filter((image) => imageIds.includes(image.id));
+        if (beforeImages.length === 0) {
+          return note;
+        }
+
+        const actionTimestamp = now();
+        const scaledMap = new Map(
+          beforeImages.map((image) => [
+            image.id,
+            {
+              ...image,
+              x: centerX + (image.x - centerX) * scale,
+              y: centerY + (image.y - centerY) * scale,
+              width: image.width * scale,
+              height: image.height * scale,
+            },
+          ]),
+        );
+        const nextImages = note.images.map((image) => scaledMap.get(image.id) ?? image);
+        const afterImages = nextImages.filter((image) => imageIds.includes(image.id));
+
+        const lastAction = note.undoHistory[note.undoHistory.length - 1];
+        const shouldMerge =
+          lastAction?.type === "transformImages"
+          && actionTimestamp - lastAction.timestamp < IMAGE_TRANSFORM_MERGE_WINDOW_MS
+          && sameImageIdSet(lastAction.afterImages, beforeImages);
+
+        const historyAction: InkHistoryAction = shouldMerge
           ? {
-              ...note,
-              images: note.images.map((img) =>
-                imageIds.includes(img.id)
-                  ? {
-                      ...img,
-                      x: centerX + (img.x - centerX) * scale,
-                      y: centerY + (img.y - centerY) * scale,
-                      width: img.width * scale,
-                      height: img.height * scale,
-                    }
-                  : img,
-              ),
-              updatedAt: now(),
+              type: "transformImages",
+              strokes: [],
+              beforeImages: lastAction.beforeImages ?? beforeImages,
+              afterImages,
+              timestamp: actionTimestamp,
             }
-          : note,
-      ),
+          : {
+              type: "transformImages",
+              strokes: [],
+              beforeImages,
+              afterImages,
+              timestamp: actionTimestamp,
+            };
+
+        return {
+          ...note,
+          images: nextImages,
+          undoHistory: shouldMerge
+            ? [...note.undoHistory.slice(0, -1), historyAction]
+            : [...note.undoHistory, historyAction],
+          redoHistory: [],
+          updatedAt: actionTimestamp,
+        };
+      }),
     }));
   },
   undoInk: () => {
@@ -491,20 +633,34 @@ export const useNoteStore = create<NoteState>((set, get) => ({
         const action = undoHistory[undoHistory.length - 1];
         let nextStrokes = note.strokes;
         let nextAnnotations = note.textAnnotations ?? [];
+        let nextImages = note.images;
 
         if (action.type === "addStroke") {
           const actionStrokeIds = new Set(action.strokes.map((stroke) => stroke.id));
           nextStrokes = note.strokes.filter((stroke) => !actionStrokeIds.has(stroke.id));
+        } else if (action.type === "addTextAnnotation") {
+          const addedAnnotationIds = new Set((action.textAnnotations ?? []).map((annotation) => annotation.id));
+          nextAnnotations = (note.textAnnotations ?? []).filter(
+            (annotation) => !addedAnnotationIds.has(annotation.id),
+          );
         } else if (action.type === "erase") {
           nextStrokes = [...note.strokes, ...action.strokes];
           const erasedAnnotations = action.textAnnotations ?? [];
           nextAnnotations = [...(note.textAnnotations ?? []), ...erasedAnnotations];
+        } else if (action.type === "addImage") {
+          const addedImageIds = new Set((action.images ?? []).map((image) => image.id));
+          nextImages = note.images.filter((image) => !addedImageIds.has(image.id));
+        } else if (action.type === "deleteImages") {
+          nextImages = appendMissingImages(note.images, action.images);
+        } else if (action.type === "transformImages") {
+          nextImages = applyImageSnapshot(note.images, action.beforeImages);
         }
 
         return {
           ...note,
           strokes: nextStrokes,
           textAnnotations: nextAnnotations,
+          images: nextImages,
           undoneStrokes: [],
           undoHistory: undoHistory.slice(0, -1),
           redoHistory: [...(note.redoHistory ?? []), action],
@@ -528,9 +684,12 @@ export const useNoteStore = create<NoteState>((set, get) => ({
         const action = redoHistory[redoHistory.length - 1];
         let nextStrokes = note.strokes;
         let nextAnnotations = note.textAnnotations ?? [];
+        let nextImages = note.images;
 
         if (action.type === "addStroke") {
           nextStrokes = [...note.strokes, ...action.strokes];
+        } else if (action.type === "addTextAnnotation") {
+          nextAnnotations = [...(note.textAnnotations ?? []), ...(action.textAnnotations ?? [])];
         } else if (action.type === "erase") {
           const erasedStrokeIds = new Set(action.strokes.map((stroke) => stroke.id));
           nextStrokes = note.strokes.filter((stroke) => !erasedStrokeIds.has(stroke.id));
@@ -539,12 +698,20 @@ export const useNoteStore = create<NoteState>((set, get) => ({
           nextAnnotations = (note.textAnnotations ?? []).filter(
             (annotation) => !erasedAnnotationIds.has(annotation.id),
           );
+        } else if (action.type === "addImage") {
+          nextImages = appendMissingImages(note.images, action.images);
+        } else if (action.type === "deleteImages") {
+          const deletedImageIds = new Set((action.images ?? []).map((image) => image.id));
+          nextImages = note.images.filter((image) => !deletedImageIds.has(image.id));
+        } else if (action.type === "transformImages") {
+          nextImages = applyImageSnapshot(note.images, action.afterImages);
         }
 
         return {
           ...note,
           strokes: nextStrokes,
           textAnnotations: nextAnnotations,
+          images: nextImages,
           undoneStrokes: [],
           undoHistory: [...(note.undoHistory ?? []), action],
           redoHistory: redoHistory.slice(0, -1),
