@@ -216,7 +216,25 @@ Edit `src/utils/ink.ts` in `strokePolygon()`:
 - `PUT /api/notes/:id` - Update note
 - `DELETE /api/notes/:id` - Delete note
 - `POST /api/notes/bulk` - Bulk save/update notes
+- `POST /api/solve` - Solve handwritten equations using AI
+- `POST /api/graph` - Convert equations to graphable LaTeX
 - `GET /health` - Health check
+
+## Documentation
+
+- **[CONTRIBUTING.md](./CONTRIBUTING.md)** - Guide for new contributors
+- **[MONGODB_ACCESS.md](./MONGODB_ACCESS.md)** - Managing MongoDB Atlas access for your team
+- **[OPENROUTER_GUIDE.md](./OPENROUTER_GUIDE.md)** - Using OpenRouter API for AI features
+- **[GETTING_STARTED.md](./GETTING_STARTED.md)** - Quick setup guide
+- **[LATEX_GUIDE.md](./LATEX_GUIDE.md)** - LaTeX annotation syntax
+
+## Contributing
+
+We welcome contributions! Please see [CONTRIBUTING.md](./CONTRIBUTING.md) for details on:
+- Setting up your development environment
+- MongoDB configuration options
+- OpenRouter API setup
+- Code standards and workflow
 
 ## Real-time Collaboration (Future)
 

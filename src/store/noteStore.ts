@@ -1,6 +1,7 @@
 import { create } from "zustand";
 import type { InkStroke, InkTool, Note, NoteBundle, TextAnnotation, WhiteboardImage } from "../types";
 import { strokeIntersectsCircle, strokesToPngDataUrl, uid } from "../utils/ink";
+import { deleteNote as deleteNoteFromDb } from "../api/client";
 
 const now = () => Date.now();
 
@@ -120,6 +121,12 @@ export const useNoteStore = create<NoteState>((set, get) => ({
     }));
   },
   deleteNote: (id) => {
+    // Delete from database first
+    deleteNoteFromDb(id).catch((error) => {
+      console.error("Failed to delete note from database:", error);
+    });
+    
+    // Then update local state
     set((state) => {
       const remaining = state.notes.filter((note) => note.id !== id);
       if (remaining.length > 0) {

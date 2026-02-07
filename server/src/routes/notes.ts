@@ -113,6 +113,16 @@ router.post("/bulk", async (req: Request, res: Response) => {
       return res.status(400).json({ error: "Expected an array of notes" });
     }
     
+    // Get all note IDs from the request
+    const requestNoteIds = new Set(notes.map(note => note.id));
+    
+    // Get all note IDs currently in the database
+    const existingNotes = await getNotesCollection().find({}, { projection: { id: 1 } }).toArray();
+    const existingNoteIds = existingNotes.map(note => note.id);
+    
+    // Find notes that exist in DB but not in the request (these should be deleted)
+    const notesToDelete = existingNoteIds.filter(id => !requestNoteIds.has(id));
+    
     // Use bulk operations for better performance
     const bulkOps = notes.map(note => {
       // Remove _id from the note to avoid MongoDB immutable field error
@@ -127,11 +137,21 @@ router.post("/bulk", async (req: Request, res: Response) => {
       };
     });
     
+    // Execute bulk write for upserts
     if (bulkOps.length > 0) {
       await getNotesCollection().bulkWrite(bulkOps);
     }
     
-    res.json({ success: true, count: notes.length });
+    // Delete notes that are no longer in the client state
+    if (notesToDelete.length > 0) {
+      await getNotesCollection().deleteMany({ id: { $in: notesToDelete } });
+    }
+    
+    res.json({ 
+      success: true, 
+      saved: notes.length,
+      deleted: notesToDelete.length 
+    });
   } catch (error) {
     console.error("Error bulk saving notes:", error);
     res.status(500).json({ error: "Failed to bulk save notes" });
