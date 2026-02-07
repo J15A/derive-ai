@@ -196,7 +196,7 @@ export default function App(): JSX.Element {
   }, [notes, selectedNoteId, selectNote]);
 
   return (
-    <div className="h-full bg-gradient-to-b from-slate-100 via-slate-100 to-slate-200 p-3 md:p-4">
+    <div className="h-full">
       <div className={`mx-auto grid h-full max-w-[1800px] grid-cols-1 gap-2 ${
         sidebarCollapsed ? "md:grid-cols-1" : "md:grid-cols-[300px_1fr]"
       }`}>

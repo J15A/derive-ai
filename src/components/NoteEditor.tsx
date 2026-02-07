@@ -143,7 +143,7 @@ export function NoteEditor({
 
   if (!safeNote) {
     return (
-      <main className="flex h-full min-h-0 items-center justify-center rounded-2xl border border-slate-200 bg-white shadow-soft" ref={rootRef}>
+      <main className="flex h-full min-h-0 items-center justify-center rounded-2xl bg-white shadow-soft" ref={rootRef}>
         No note selected.
       </main>
     );
@@ -223,7 +223,7 @@ export function NoteEditor({
   };
 
   return (
-    <main className="flex h-full min-h-0 min-w-0 flex-col overflow-hidden rounded-2xl border border-slate-200 bg-panel shadow-soft" ref={rootRef}>
+    <main className="flex h-full min-h-0 min-w-0 flex-col overflow-hidden rounded-2xl bg-panel shadow-soft" ref={rootRef}>
       <Toolbar
         tool={tool}
         color={color}
