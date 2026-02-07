@@ -2,6 +2,7 @@ import express from "express";
 import cors from "cors";
 import dotenv from "dotenv";
 import { connectToDatabase, closeDatabase } from "./mongodb.js";
+import { requireAuth } from "./middleware/auth.js";
 import notesRouter from "./routes/notes.js";
 import solveRouter from "./routes/solve.js";
 import graphRouter from "./routes/graph.js";
@@ -28,7 +29,7 @@ app.get("/health", (req, res) => {
 });
 
 // Routes
-app.use("/api/notes", notesRouter);
+app.use("/api/notes", requireAuth, notesRouter);
 app.use("/api/solve", solveRouter);
 app.use("/api/graph", graphRouter);
 

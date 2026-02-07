@@ -7,8 +7,13 @@ const router = Router();
 // Get all notes
 router.get("/", async (req: Request, res: Response) => {
   try {
+    const ownerSub = req.auth?.sub;
+    if (!ownerSub) {
+      return res.status(401).json({ error: "Unauthorized" });
+    }
+
     const notes = await getNotesCollection()
-      .find({})
+      .find({ ownerSub })
       .sort({ updatedAt: -1 })
       .toArray();
     
@@ -22,8 +27,13 @@ router.get("/", async (req: Request, res: Response) => {
 // Get a single note by id
 router.get("/:id", async (req: Request, res: Response) => {
   try {
+    const ownerSub = req.auth?.sub;
+    if (!ownerSub) {
+      return res.status(401).json({ error: "Unauthorized" });
+    }
+
     const { id } = req.params;
-    const note = await getNotesCollection().findOne({ id });
+    const note = await getNotesCollection().findOne({ ownerSub, id });
     
     if (!note) {
       return res.status(404).json({ error: "Note not found" });
@@ -39,15 +49,25 @@ router.get("/:id", async (req: Request, res: Response) => {
 // Create a new note
 router.post("/", async (req: Request, res: Response) => {
   try {
-    const note: Note = req.body;
+    const ownerSub = req.auth?.sub;
+    if (!ownerSub) {
+      return res.status(401).json({ error: "Unauthorized" });
+    }
+
+    const incoming = req.body as Partial<Note>;
     
     // Validate required fields
-    if (!note.id || !note.title) {
+    if (!incoming.id || !incoming.title) {
       return res.status(400).json({ error: "Missing required fields: id, title" });
     }
+
+    const note: Note = {
+      ...(incoming as Note),
+      ownerSub,
+    };
     
     // Check if note with this id already exists
-    const existing = await getNotesCollection().findOne({ id: note.id });
+    const existing = await getNotesCollection().findOne({ ownerSub, id: note.id });
     if (existing) {
       return res.status(409).json({ error: "Note with this id already exists" });
     }
@@ -63,22 +83,28 @@ router.post("/", async (req: Request, res: Response) => {
 // Update an existing note
 router.put("/:id", async (req: Request, res: Response) => {
   try {
+    const ownerSub = req.auth?.sub;
+    if (!ownerSub) {
+      return res.status(401).json({ error: "Unauthorized" });
+    }
+
     const { id } = req.params;
     const updates: Partial<Note> = req.body;
     
     // Remove id from updates to prevent changing it
     delete (updates as any).id;
+    delete (updates as any).ownerSub;
     
     const result = await getNotesCollection().updateOne(
-      { id },
-      { $set: updates }
+      { ownerSub, id },
+      { $set: { ...updates, ownerSub } }
     );
     
     if (result.matchedCount === 0) {
       return res.status(404).json({ error: "Note not found" });
     }
     
-    const updatedNote = await getNotesCollection().findOne({ id });
+    const updatedNote = await getNotesCollection().findOne({ ownerSub, id });
     res.json(updatedNote);
   } catch (error) {
     console.error("Error updating note:", error);
@@ -89,9 +115,14 @@ router.put("/:id", async (req: Request, res: Response) => {
 // Delete a note
 router.delete("/:id", async (req: Request, res: Response) => {
   try {
+    const ownerSub = req.auth?.sub;
+    if (!ownerSub) {
+      return res.status(401).json({ error: "Unauthorized" });
+    }
+
     const { id } = req.params;
     
-    const result = await getNotesCollection().deleteOne({ id });
+    const result = await getNotesCollection().deleteOne({ ownerSub, id });
     
     if (result.deletedCount === 0) {
       return res.status(404).json({ error: "Note not found" });
@@ -107,7 +138,12 @@ router.delete("/:id", async (req: Request, res: Response) => {
 // Bulk save notes (useful for syncing)
 router.post("/bulk", async (req: Request, res: Response) => {
   try {
-    const notes: Note[] = req.body;
+    const ownerSub = req.auth?.sub;
+    if (!ownerSub) {
+      return res.status(401).json({ error: "Unauthorized" });
+    }
+
+    const notes = req.body as Partial<Note>[];
     
     if (!Array.isArray(notes)) {
       return res.status(400).json({ error: "Expected an array of notes" });
@@ -116,12 +152,12 @@ router.post("/bulk", async (req: Request, res: Response) => {
     // Use bulk operations for better performance
     const bulkOps = notes.map(note => {
       // Remove _id from the note to avoid MongoDB immutable field error
-      const { _id, ...noteWithoutId } = note as any;
+      const { _id, ownerSub: _ignoredOwnerSub, ...noteWithoutId } = note as any;
       
       return {
         updateOne: {
-          filter: { id: note.id },
-          update: { $set: noteWithoutId },
+          filter: { ownerSub, id: note.id },
+          update: { $set: { ...noteWithoutId, ownerSub } },
           upsert: true
         }
       };

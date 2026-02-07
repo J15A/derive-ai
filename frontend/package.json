@@ -9,6 +9,7 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "@auth0/auth0-react": "^2.13.0",
     "@fontsource/caveat": "^5.2.8",
     "@fontsource/indie-flower": "^5.2.7",
     "@types/katex": "^0.16.8",

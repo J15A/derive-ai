@@ -20,6 +20,7 @@ export interface CanvasViewport {
 }
 
 export interface Note {
+  ownerSub: string;
   id: string;
   title: string;
   text: string;

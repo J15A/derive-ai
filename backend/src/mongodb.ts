@@ -24,6 +24,14 @@ export async function connectToDatabase(uri: string): Promise<Db> {
     console.log("✅ Connected to MongoDB");
     
     // Create indexes for better query performance
+    await db.collection("notes").createIndex(
+      { ownerSub: 1, id: 1 },
+      {
+        unique: true,
+        partialFilterExpression: { ownerSub: { $exists: true }, id: { $exists: true } },
+      },
+    );
+    await db.collection("notes").createIndex({ ownerSub: 1, updatedAt: -1 });
     await db.collection("notes").createIndex({ updatedAt: -1 });
     await db.collection("notes").createIndex({ title: "text", text: "text" });
     
