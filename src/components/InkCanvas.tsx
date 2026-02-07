@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { InkPoint, InkStroke, InkTool, Note } from "../types";
 import { drawStrokePolygon, strokePolygon, uid } from "../utils/ink";
+import { SelectionPopup } from "./SelectionPopup";
 
 interface InkCanvasProps {
   note: Note;
@@ -13,6 +14,8 @@ interface InkCanvasProps {
   onEraseAt: (noteId: string, x: number, y: number, radius: number) => void;
   onDeleteStrokes: (noteId: string, strokeIds: string[]) => void;
   onMoveStrokes: (noteId: string, strokeIds: string[], dx: number, dy: number) => void;
+  onDuplicateStrokes: (noteId: string, strokeIds: string[]) => string[];
+  onChangeStrokesColor: (noteId: string, strokeIds: string[], newColor: string) => void;
   onPanViewport: (noteId: string, dx: number, dy: number) => void;
   onZoomViewportAt: (noteId: string, nextScale: number, anchorX: number, anchorY: number) => void;
   onExportReady?: (exportFn: () => string) => void;
@@ -31,6 +34,8 @@ export function InkCanvas({
   onEraseAt,
   onDeleteStrokes,
   onMoveStrokes,
+  onDuplicateStrokes,
+  onChangeStrokesColor,
   onPanViewport,
   onZoomViewportAt,
   onExportReady,
@@ -50,6 +55,8 @@ export function InkCanvas({
   const [isDraggingSelection, setIsDraggingSelection] = useState(false);
   const [dragOffset, setDragOffset] = useState<{ x: number; y: number } | null>(null);
   const [eraserTrail, setEraserTrail] = useState<{ x: number; y: number }[]>([]);
+  const [showPopup, setShowPopup] = useState(false);
+  const [popupPosition, setPopupPosition] = useState<{ x: number; y: number }>({ x: 0, y: 0 });
 
   const drawScene = useCallback(() => {
     const canvas = canvasRef.current;
@@ -277,6 +284,7 @@ export function InkCanvas({
     if (tool !== "selector" && selectedStrokes.length > 0) {
       setSelectedStrokes([]);
       setSelectionBox(null);
+      setShowPopup(false);
     }
     
     // Clear eraser trail when switching tools
@@ -284,6 +292,54 @@ export function InkCanvas({
       setEraserTrail([]);
     }
   }, [tool, selectedStrokes.length]);
+
+  // Show popup below selection when strokes are selected
+  useEffect(() => {
+    if (selectedStrokes.length > 0 && tool === "selector" && !isDraggingSelection) {
+      // Calculate bounding box of selected strokes in world space
+      let minX = Infinity;
+      let minY = Infinity;
+      let maxX = -Infinity;
+      let maxY = -Infinity;
+      
+      for (const stroke of note.strokes) {
+        if (selectedStrokes.includes(stroke.id)) {
+          const points = stroke.points;
+          if (points.length > 0) {
+            const xs = points.map(p => p.x);
+            const ys = points.map(p => p.y);
+            minX = Math.min(minX, ...xs);
+            minY = Math.min(minY, ...ys);
+            maxX = Math.max(maxX, ...xs);
+            maxY = Math.max(maxY, ...ys);
+          }
+        }
+      }
+      
+      if (minX !== Infinity && maxX !== -Infinity) {
+        // Convert world coordinates to canvas/screen coordinates
+        const canvas = canvasRef.current;
+        if (canvas) {
+          const rect = canvas.getBoundingClientRect();
+          // Center horizontally, position below the bottom of the selection
+          const centerX = (minX + maxX) / 2;
+          const bottomY = maxY + 10; // 10px padding in world space
+          
+          const canvasX = centerX * note.viewport.scale + note.viewport.offsetX;
+          const canvasY = bottomY * note.viewport.scale + note.viewport.offsetY;
+          
+          // Position popup relative to the viewport (fixed positioning)
+          setPopupPosition({
+            x: rect.left + canvasX,
+            y: rect.top + canvasY,
+          });
+          setShowPopup(true);
+        }
+      }
+    } else {
+      setShowPopup(false);
+    }
+  }, [selectedStrokes, tool, note.strokes, note.viewport, isDraggingSelection]);
 
   useEffect(() => {
     if (!onExportReady) {
@@ -603,6 +659,46 @@ export function InkCanvas({
     };
   }, [selectedStrokes, tool, note.id, onDeleteStrokes]);
 
+  const handlePopupDelete = () => {
+    onDeleteStrokes(note.id, selectedStrokes);
+    setSelectedStrokes([]);
+    setShowPopup(false);
+  };
+
+  const handlePopupDuplicate = () => {
+    const newIds = onDuplicateStrokes(note.id, selectedStrokes);
+    setSelectedStrokes(newIds);
+    setShowPopup(false);
+  };
+
+  const handlePopupSolve = () => {
+    // Get the selected strokes
+    const selectedStrokeObjects = note.strokes.filter(stroke => 
+      selectedStrokes.includes(stroke.id)
+    );
+    
+    // Placeholder for solving logic
+    // In the future, this could:
+    // 1. Convert strokes to an image
+    // 2. Send to an OCR/handwriting recognition API
+    // 3. Parse the equation
+    // 4. Solve it mathematically
+    // 5. Display the result
+    
+    console.log('Solving equation from selected strokes:', selectedStrokeObjects);
+    alert('Solve feature coming soon! Selected ' + selectedStrokes.length + ' strokes.');
+    
+    setShowPopup(false);
+  };
+
+  const handlePopupChangeColor = (newColor: string) => {
+    onChangeStrokesColor(note.id, selectedStrokes, newColor);
+  };
+
+  const handlePopupClose = () => {
+    setShowPopup(false);
+  };
+
   return (
     <div className="relative h-full min-h-0 w-full overflow-hidden rounded-b-2xl bg-slate-50" ref={containerRef}>
       <canvas
@@ -615,6 +711,16 @@ export function InkCanvas({
         onPointerCancel={handlePointerUp}
         onWheel={handleWheel}
       />
+      {showPopup && (
+        <SelectionPopup
+          position={popupPosition}
+          onDelete={handlePopupDelete}
+          onDuplicate={handlePopupDuplicate}
+          onChangeColor={handlePopupChangeColor}
+          onSolve={handlePopupSolve}
+          onClose={handlePopupClose}
+        />
+      )}
     </div>
   );
 }

@@ -50,6 +50,8 @@ interface NoteState {
   eraseAt: (noteId: string, x: number, y: number, radius: number) => void;
   deleteStrokes: (noteId: string, strokeIds: string[]) => void;
   moveStrokes: (noteId: string, strokeIds: string[], dx: number, dy: number) => void;
+  duplicateStrokes: (noteId: string, strokeIds: string[]) => string[];
+  changeStrokesColor: (noteId: string, strokeIds: string[], newColor: string) => void;
   undoInk: () => void;
   redoInk: () => void;
   clearInk: () => void;
@@ -219,6 +221,63 @@ export const useNoteStore = create<NoteState>((set, get) => ({
                 x: p.x + dx,
                 y: p.y + dy,
               })),
+            };
+          }),
+          undoneStrokes: [],
+          updatedAt: now(),
+        };
+      }),
+    }));
+  },
+  duplicateStrokes: (noteId, strokeIds) => {
+    const newIds: string[] = [];
+    
+    set((state) => ({
+      notes: state.notes.map((note) => {
+        if (note.id !== noteId) {
+          return note;
+        }
+        const duplicates = note.strokes
+          .filter((stroke) => strokeIds.includes(stroke.id))
+          .map((stroke) => {
+            const newId = uid();
+            newIds.push(newId);
+            return {
+              ...stroke,
+              id: newId,
+              points: stroke.points.map((p) => ({
+                ...p,
+                x: p.x + 20, // Offset duplicates slightly
+                y: p.y + 20,
+              })),
+            };
+          });
+        return {
+          ...note,
+          strokes: [...note.strokes, ...duplicates],
+          undoneStrokes: [],
+          updatedAt: now(),
+        };
+      }),
+    }));
+    
+    return newIds;
+  },
+  changeStrokesColor: (noteId, strokeIds, newColor) => {
+    set((state) => ({
+      notes: state.notes.map((note) => {
+        if (note.id !== noteId) {
+          return note;
+        }
+        return {
+          ...note,
+          strokes: note.strokes.map((stroke) => {
+            if (!strokeIds.includes(stroke.id)) {
+              return stroke;
+            }
+            return {
+              ...stroke,
+              color: newColor,
             };
           }),
           undoneStrokes: [],

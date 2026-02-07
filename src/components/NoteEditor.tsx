@@ -25,6 +25,8 @@ interface NoteEditorProps {
   onEraseAt: (noteId: string, x: number, y: number, radius: number) => void;
   onDeleteStrokes: (noteId: string, strokeIds: string[]) => void;
   onMoveStrokes: (noteId: string, strokeIds: string[], dx: number, dy: number) => void;
+  onDuplicateStrokes: (noteId: string, strokeIds: string[]) => string[];
+  onChangeStrokesColor: (noteId: string, strokeIds: string[], newColor: string) => void;
   onPanViewport: (noteId: string, dx: number, dy: number) => void;
   onZoomViewportAt: (noteId: string, nextScale: number, anchorX: number, anchorY: number) => void;
   onResetViewport: () => void;
@@ -63,6 +65,8 @@ export function NoteEditor({
   onEraseAt,
   onDeleteStrokes,
   onMoveStrokes,
+  onDuplicateStrokes,
+  onChangeStrokesColor,
   onPanViewport,
   onZoomViewportAt,
   onResetViewport,
@@ -182,6 +186,8 @@ export function NoteEditor({
           onEraseAt={onEraseAt}
           onDeleteStrokes={onDeleteStrokes}
           onMoveStrokes={onMoveStrokes}
+          onDuplicateStrokes={onDuplicateStrokes}
+          onChangeStrokesColor={onChangeStrokesColor}
           onPanViewport={onPanViewport}
           onZoomViewportAt={onZoomViewportAt}
         />

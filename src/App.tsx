@@ -37,6 +37,8 @@ export default function App(): JSX.Element {
     eraseAt,
     deleteStrokes,
     moveStrokes,
+    duplicateStrokes,
+    changeStrokesColor,
     panViewport,
     zoomViewportAt,
     resetViewport,
@@ -240,6 +242,8 @@ export default function App(): JSX.Element {
             onEraseAt={eraseAt}
             onDeleteStrokes={deleteStrokes}
             onMoveStrokes={moveStrokes}
+            onDuplicateStrokes={duplicateStrokes}
+            onChangeStrokesColor={changeStrokesColor}
             onPanViewport={panViewport}
             onZoomViewportAt={zoomViewportAt}
             onResetViewport={resetViewport}
