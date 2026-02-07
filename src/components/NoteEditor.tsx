@@ -4,6 +4,8 @@ import { buildNoteBundle } from "../store/noteStore";
 import { strokesToPngDataUrl } from "../utils/ink";
 import { InkCanvas } from "./InkCanvas";
 import { TextEditor } from "./TextEditor";
+import { GraphPanel } from "./GraphPanel";
+import type { GraphEquation } from "./GraphPanel";
 import { Toolbar } from "./Toolbar";
 
 interface NoteEditorProps {
@@ -80,6 +82,29 @@ export function NoteEditor({
   const safeNote = useMemo(() => note, [note]);
   const rootRef = useRef<HTMLElement | null>(null);
   const [isFullscreen, setIsFullscreen] = useState(false);
+  const [showGraphPanel, setShowGraphPanel] = useState(false);
+  const [graphEquations, setGraphEquations] = useState<GraphEquation[]>([]);
+  const graphColorIndex = useRef(0);
+
+  const GRAPH_COLORS = [
+    "#2d70b3", "#c74440", "#388c46", "#6042a6", "#000000", "#fa7e19",
+  ];
+
+  const handleAddToGraph = useCallback((latex: string) => {
+    const color = GRAPH_COLORS[graphColorIndex.current % GRAPH_COLORS.length];
+    graphColorIndex.current += 1;
+    const eq: GraphEquation = {
+      id: `eq-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+      latex,
+      color,
+    };
+    setGraphEquations((prev) => [...prev, eq]);
+    setShowGraphPanel(true);
+  }, []);
+
+  const handleRemoveEquation = useCallback((id: string) => {
+    setGraphEquations((prev) => prev.filter((eq) => eq.id !== id));
+  }, []);
 
   useEffect(() => {
     const onFullscreenChange = () => {
@@ -146,6 +171,7 @@ export function NoteEditor({
         highlighterSize={highlighterSize}
         showGrid={showGrid}
         showTextPanel={showTextPanel}
+        showGraphPanel={showGraphPanel}
         isFullscreen={isFullscreen}
         zoomPercent={Math.round(safeNote.viewport.scale * 100)}
         onToolChange={onToolChange}
@@ -154,6 +180,7 @@ export function NoteEditor({
         onHighlighterSizeChange={onHighlighterSizeChange}
         onShowGridChange={onShowGridChange}
         onShowTextPanelChange={onShowTextPanelChange}
+        onShowGraphPanelChange={setShowGraphPanel}
         onToggleFullscreen={() => {
           toggleFullscreen().catch((error: unknown) => {
             const message = error instanceof Error ? error.message : "Fullscreen failed";
@@ -193,6 +220,7 @@ export function NoteEditor({
           onAddTextAnnotation={onAddTextAnnotation}
           onPanViewport={onPanViewport}
           onZoomViewportAt={onZoomViewportAt}
+          onAddToGraph={handleAddToGraph}
         />
 
         {showTextPanel ? (
@@ -203,6 +231,16 @@ export function NoteEditor({
               onClose={() => onShowTextPanelChange(false)}
             />
           </section>
+        ) : null}
+
+        {showGraphPanel ? (
+          <div className={`absolute top-3 z-20 w-[380px] max-w-[calc(100%-1.5rem)] ${showTextPanel ? "left-3" : "right-3"}`}>
+            <GraphPanel
+              equations={graphEquations}
+              onRemoveEquation={handleRemoveEquation}
+              onClose={() => setShowGraphPanel(false)}
+            />
+          </div>
         ) : null}
       </div>
     </main>

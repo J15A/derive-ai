@@ -4,6 +4,7 @@ import dotenv from "dotenv";
 import { connectToDatabase, closeDatabase } from "./mongodb.js";
 import notesRouter from "./routes/notes.js";
 import solveRouter from "./routes/solve.js";
+import graphRouter from "./routes/graph.js";
 
 dotenv.config();
 
@@ -29,6 +30,7 @@ app.get("/health", (req, res) => {
 // Routes
 app.use("/api/notes", notesRouter);
 app.use("/api/solve", solveRouter);
+app.use("/api/graph", graphRouter);
 
 // Error handling middleware
 app.use((err: Error, req: express.Request, res: express.Response, next: express.NextFunction) => {
@@ -49,6 +51,7 @@ async function startServer() {
       console.log(`🚀 Server running on http://localhost:${PORT}`);
       console.log(`📝 API endpoint: http://localhost:${PORT}/api/notes`);
       console.log(`🧮 Solve endpoint: http://localhost:${PORT}/api/solve`);
+      console.log(`📈 Graph endpoint: http://localhost:${PORT}/api/graph`);
     });
   } catch (error) {
     console.error("Failed to start server:", error);

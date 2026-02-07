@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { InkPoint, InkStroke, InkTool, Note, TextAnnotation } from "../types";
 import { drawStrokePolygon, strokePolygon, strokesToPngDataUrl, uid } from "../utils/ink";
-import { solveEquation } from "../api/client";
+import { solveEquation, recognizeEquationForGraph } from "../api/client";
 import { SelectionPopup } from "./SelectionPopup";
 import { textToStrokes } from "../utils/textToStrokes";
 
@@ -21,6 +21,7 @@ interface InkCanvasProps {
   onAddTextAnnotation: (noteId: string, annotation: TextAnnotation) => void;
   onPanViewport: (noteId: string, dx: number, dy: number) => void;
   onZoomViewportAt: (noteId: string, nextScale: number, anchorX: number, anchorY: number) => void;
+  onAddToGraph?: (latex: string) => void;
   onExportReady?: (exportFn: () => string) => void;
 }
 
@@ -42,6 +43,7 @@ export function InkCanvas({
   onAddTextAnnotation,
   onPanViewport,
   onZoomViewportAt,
+  onAddToGraph,
   onExportReady,
 }: InkCanvasProps): JSX.Element {
   const containerRef = useRef<HTMLDivElement | null>(null);
@@ -62,6 +64,7 @@ export function InkCanvas({
   const [showPopup, setShowPopup] = useState(false);
   const [popupPosition, setPopupPosition] = useState<{ x: number; y: number }>({ x: 0, y: 0 });
   const [isSolving, setIsSolving] = useState(false);
+  const [isGraphing, setIsGraphing] = useState(false);
   const [textInput, setTextInput] = useState<{ x: number; y: number; worldX: number; worldY: number } | null>(null);
   const [textValue, setTextValue] = useState("");
 
@@ -787,6 +790,41 @@ export function InkCanvas({
     onChangeStrokesColor(note.id, selectedStrokes, newColor);
   };
 
+  const handlePopupAddToGraph = async () => {
+    const selectedStrokeObjects = note.strokes.filter(stroke =>
+      selectedStrokes.includes(stroke.id)
+    );
+    if (selectedStrokeObjects.length === 0) return;
+
+    setIsGraphing(true);
+    console.log("📈 Adding to graph:", selectedStrokeObjects.length, "strokes");
+    
+    try {
+      const imageDataUrl = strokesToPngDataUrl(selectedStrokeObjects);
+      console.log("📸 Generated image data URL, length:", imageDataUrl.length);
+      
+      const latex = await recognizeEquationForGraph(imageDataUrl);
+      console.log("✅ Recognized LaTeX:", latex);
+      
+      if (onAddToGraph) {
+        onAddToGraph(latex);
+        console.log("📊 Added to graph panel");
+      } else {
+        console.warn("⚠️ onAddToGraph callback is not defined");
+      }
+      
+      setSelectedStrokes([]);
+      setSelectionBox(null);
+    } catch (error) {
+      console.error("❌ Failed to add to graph:", error);
+      const message = error instanceof Error ? error.message : "Failed to recognize equation";
+      alert(`❌ Error adding to graph\n\n${message}\n\nMake sure the server is running on port 3001`);
+    } finally {
+      setIsGraphing(false);
+      setShowPopup(false);
+    }
+  };
+
   const handlePopupClose = () => {
     setShowPopup(false);
   };
@@ -846,10 +884,12 @@ export function InkCanvas({
         <SelectionPopup
           position={popupPosition}
           isSolving={isSolving}
+          isGraphing={isGraphing}
           onDelete={handlePopupDelete}
           onDuplicate={handlePopupDuplicate}
           onChangeColor={handlePopupChangeColor}
           onSolve={handlePopupSolve}
+          onAddToGraph={handlePopupAddToGraph}
           onClose={handlePopupClose}
         />
       )}

@@ -1,13 +1,15 @@
-import { Copy, Trash2, Palette, Calculator, Loader2 } from "lucide-react";
+import { Copy, Trash2, Palette, Calculator, Loader2, LineChart } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 
 interface SelectionPopupProps {
   position: { x: number; y: number };
   isSolving?: boolean;
+  isGraphing?: boolean;
   onDelete: () => void;
   onDuplicate: () => void;
   onChangeColor: (color: string) => void;
   onSolve: () => void;
+  onAddToGraph: () => void;
   onClose: () => void;
 }
 
@@ -25,10 +27,12 @@ const COLORS = [
 export function SelectionPopup({ 
   position,
   isSolving = false,
+  isGraphing = false,
   onDelete, 
   onDuplicate, 
   onChangeColor,
   onSolve,
+  onAddToGraph,
   onClose 
 }: SelectionPopupProps): JSX.Element {
   const popupRef = useRef<HTMLDivElement>(null);
@@ -88,6 +92,16 @@ export function SelectionPopup({
         type="button"
       >
         {isSolving ? <Loader2 size={18} className="animate-spin" /> : <Calculator size={18} />}
+      </button>
+
+      <button
+        className="flex items-center justify-center rounded-md p-2 text-emerald-600 transition-colors hover:bg-emerald-50 disabled:opacity-50"
+        onClick={onAddToGraph}
+        disabled={isGraphing}
+        title="Add to Graph"
+        type="button"
+      >
+        {isGraphing ? <Loader2 size={18} className="animate-spin" /> : <LineChart size={18} />}
       </button>
 
       <div className="relative">

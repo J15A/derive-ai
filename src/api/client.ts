@@ -116,3 +116,21 @@ export async function solveEquation(imageDataUrl: string): Promise<string> {
   const data = (await response.json()) as { result: string };
   return data.result;
 }
+
+export async function recognizeEquationForGraph(imageDataUrl: string): Promise<string> {
+  const response = await fetch(`${API_BASE_URL}/graph`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ imageDataUrl }),
+  });
+
+  if (!response.ok) {
+    const body = await response.json().catch(() => ({}));
+    throw new Error((body as { error?: string }).error || `Failed to recognize equation: ${response.statusText}`);
+  }
+
+  const data = (await response.json()) as { latex: string };
+  return data.latex;
+}

@@ -19,7 +19,8 @@ import {
   Image,
   Package,
   Upload,
-  TextCursor
+  TextCursor,
+  LineChart
 } from "lucide-react";
 import { useState } from "react";
 
@@ -30,6 +31,7 @@ interface ToolbarProps {
   highlighterSize: number;
   showGrid: boolean;
   showTextPanel: boolean;
+  showGraphPanel: boolean;
   isFullscreen: boolean;
   zoomPercent: number;
   onToolChange: (tool: InkTool) => void;
@@ -38,6 +40,7 @@ interface ToolbarProps {
   onHighlighterSizeChange: (value: number) => void;
   onShowGridChange: (value: boolean) => void;
   onShowTextPanelChange: (value: boolean) => void;
+  onShowGraphPanelChange: (value: boolean) => void;
   onToggleFullscreen: () => void;
   onZoomIn: () => void;
   onZoomOut: () => void;
@@ -74,6 +77,7 @@ export function Toolbar({
   highlighterSize,
   showGrid,
   showTextPanel,
+  showGraphPanel,
   isFullscreen,
   zoomPercent,
   onToolChange,
@@ -82,6 +86,7 @@ export function Toolbar({
   onHighlighterSizeChange,
   onShowGridChange,
   onShowTextPanelChange,
+  onShowGraphPanelChange,
   onToggleFullscreen,
   onZoomIn,
   onZoomOut,
@@ -306,6 +311,14 @@ export function Toolbar({
           title="Toggle Text Panel"
         >
           <Type size={20} />
+        </button>
+        <button 
+          className={`tool-btn ${showGraphPanel ? "tool-btn-active" : ""}`}
+          type="button" 
+          onClick={() => onShowGraphPanelChange(!showGraphPanel)}
+          title="Toggle Graph Panel"
+        >
+          <LineChart size={20} />
         </button>
       </div>
 
