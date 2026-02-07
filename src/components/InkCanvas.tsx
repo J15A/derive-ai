@@ -49,6 +49,7 @@ export function InkCanvas({
   const [selectedStrokes, setSelectedStrokes] = useState<string[]>([]);
   const [isDraggingSelection, setIsDraggingSelection] = useState(false);
   const [dragOffset, setDragOffset] = useState<{ x: number; y: number } | null>(null);
+  const [eraserTrail, setEraserTrail] = useState<{ x: number; y: number }[]>([]);
 
   const drawScene = useCallback(() => {
     const canvas = canvasRef.current;
@@ -202,9 +203,25 @@ export function InkCanvas({
       );
       ctx.setLineDash([]);
     }
+    
+    // Draw eraser trail
+    if (eraserTrail.length > 1 && tool === "eraser") {
+      const currentSize = tool === "highlighter" ? highlighterSize : penSize;
+      ctx.strokeStyle = "rgba(156, 163, 175, 0.4)"; // Faint grey
+      ctx.lineWidth = Math.max(2, currentSize * 0.5) / note.viewport.scale;
+      ctx.lineCap = "round";
+      ctx.lineJoin = "round";
+      
+      ctx.beginPath();
+      ctx.moveTo(eraserTrail[0].x, eraserTrail[0].y);
+      for (let i = 1; i < eraserTrail.length; i++) {
+        ctx.lineTo(eraserTrail[i].x, eraserTrail[i].y);
+      }
+      ctx.stroke();
+    }
 
     ctx.restore();
-  }, [color, note.strokes, note.viewport.offsetX, note.viewport.offsetY, note.viewport.scale, showGrid, penSize, highlighterSize, tool, selectedStrokes, selectionBox]);
+  }, [color, note.strokes, note.viewport.offsetX, note.viewport.offsetY, note.viewport.scale, showGrid, penSize, highlighterSize, tool, selectedStrokes, selectionBox, eraserTrail]);
 
   const scheduleDraw = useCallback(() => {
     if (rafRef.current !== null) {
@@ -260,6 +277,11 @@ export function InkCanvas({
     if (tool !== "selector" && selectedStrokes.length > 0) {
       setSelectedStrokes([]);
       setSelectionBox(null);
+    }
+    
+    // Clear eraser trail when switching tools
+    if (tool !== "eraser") {
+      setEraserTrail([]);
     }
   }, [tool, selectedStrokes.length]);
 
@@ -394,6 +416,7 @@ export function InkCanvas({
       drawingPointerId.current = e.pointerId;
       canvas.setPointerCapture(e.pointerId);
       const point = toWorldPoint(e.clientX, e.clientY);
+      setEraserTrail([point]); // Start trail
       onEraseAt(note.id, point.x, point.y, eraserRadius);
       return;
     }
@@ -469,6 +492,13 @@ export function InkCanvas({
 
     if (tool === "eraser") {
       const point = toWorldPoint(e.clientX, e.clientY);
+      
+      // Add to trail (limit to last 30 points for performance)
+      setEraserTrail(prev => {
+        const newTrail = [...prev, point];
+        return newTrail.length > 30 ? newTrail.slice(-30) : newTrail;
+      });
+      
       onEraseAt(note.id, point.x, point.y, eraserRadius);
       return;
     }
@@ -512,6 +542,9 @@ export function InkCanvas({
         if (isDrawingRef.current) {
           finishStroke();
         }
+      } else if (tool === "eraser") {
+        // Clear trail when releasing eraser
+        setEraserTrail([]);
       } else if (tool === "selector") {
         if (isDraggingSelection && dragOffset) {
           setIsDraggingSelection(false);
