@@ -1,8 +1,9 @@
-import { Copy, Trash2, Move, Palette, Calculator } from "lucide-react";
+import { Copy, Trash2, Palette, Calculator, Loader2 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 
 interface SelectionPopupProps {
   position: { x: number; y: number };
+  isSolving?: boolean;
   onDelete: () => void;
   onDuplicate: () => void;
   onChangeColor: (color: string) => void;
@@ -22,7 +23,8 @@ const COLORS = [
 ];
 
 export function SelectionPopup({ 
-  position, 
+  position,
+  isSolving = false,
   onDelete, 
   onDuplicate, 
   onChangeColor,
@@ -79,12 +81,13 @@ export function SelectionPopup({
       </button>
 
       <button
-        className="flex items-center justify-center rounded-md p-2 text-blue-600 transition-colors hover:bg-blue-50"
+        className="flex items-center justify-center rounded-md p-2 text-blue-600 transition-colors hover:bg-blue-50 disabled:opacity-50"
         onClick={onSolve}
+        disabled={isSolving}
         title="Solve Equation"
         type="button"
       >
-        <Calculator size={18} />
+        {isSolving ? <Loader2 size={18} className="animate-spin" /> : <Calculator size={18} />}
       </button>
 
       <div className="relative">

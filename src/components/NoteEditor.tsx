@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import type { Note, NoteBundle, InkTool } from "../types";
+import type { Note, NoteBundle, InkTool, TextAnnotation } from "../types";
 import { buildNoteBundle } from "../store/noteStore";
 import { strokesToPngDataUrl } from "../utils/ink";
 import { InkCanvas } from "./InkCanvas";
@@ -27,6 +27,7 @@ interface NoteEditorProps {
   onMoveStrokes: (noteId: string, strokeIds: string[], dx: number, dy: number) => void;
   onDuplicateStrokes: (noteId: string, strokeIds: string[]) => string[];
   onChangeStrokesColor: (noteId: string, strokeIds: string[], newColor: string) => void;
+  onAddTextAnnotation: (noteId: string, annotation: TextAnnotation) => void;
   onPanViewport: (noteId: string, dx: number, dy: number) => void;
   onZoomViewportAt: (noteId: string, nextScale: number, anchorX: number, anchorY: number) => void;
   onResetViewport: () => void;
@@ -67,6 +68,7 @@ export function NoteEditor({
   onMoveStrokes,
   onDuplicateStrokes,
   onChangeStrokesColor,
+  onAddTextAnnotation,
   onPanViewport,
   onZoomViewportAt,
   onResetViewport,
@@ -188,6 +190,7 @@ export function NoteEditor({
           onMoveStrokes={onMoveStrokes}
           onDuplicateStrokes={onDuplicateStrokes}
           onChangeStrokesColor={onChangeStrokesColor}
+          onAddTextAnnotation={onAddTextAnnotation}
           onPanViewport={onPanViewport}
           onZoomViewportAt={onZoomViewportAt}
         />

@@ -24,6 +24,17 @@ export interface Selection {
   strokeIds: string[];
 }
 
+export interface TextAnnotation {
+  id: string;
+  x: number; // World coordinates
+  y: number; // World coordinates
+  text: string;
+  fontSize: number;
+  color: string;
+  width?: number; // Bounding box for selection/erasing
+  height?: number;
+}
+
 export interface CanvasViewport {
   offsetX: number;
   offsetY: number;
@@ -36,6 +47,7 @@ export interface Note {
   text: string;
   strokes: InkStroke[];
   undoneStrokes: InkStroke[];
+  textAnnotations: TextAnnotation[];
   viewport: CanvasViewport;
   createdAt: number;
   updatedAt: number;

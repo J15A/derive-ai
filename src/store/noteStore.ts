@@ -1,5 +1,5 @@
 import { create } from "zustand";
-import type { InkStroke, InkTool, Note, NoteBundle } from "../types";
+import type { InkStroke, InkTool, Note, NoteBundle, TextAnnotation } from "../types";
 import { strokeIntersectsCircle, strokesToPngDataUrl, uid } from "../utils/ink";
 
 const now = () => Date.now();
@@ -12,6 +12,7 @@ function createNote(title = "Untitled Note"): Note {
     text: "",
     strokes: [],
     undoneStrokes: [],
+    textAnnotations: [],
     viewport: { offsetX: 0, offsetY: 0, scale: 1 },
     createdAt: timestamp,
     updatedAt: timestamp,
@@ -52,6 +53,7 @@ interface NoteState {
   moveStrokes: (noteId: string, strokeIds: string[], dx: number, dy: number) => void;
   duplicateStrokes: (noteId: string, strokeIds: string[]) => string[];
   changeStrokesColor: (noteId: string, strokeIds: string[], newColor: string) => void;
+  addTextAnnotation: (noteId: string, annotation: TextAnnotation) => void;
   undoInk: () => void;
   redoInk: () => void;
   clearInk: () => void;
@@ -80,6 +82,7 @@ export const useNoteStore = create<NoteState>((set, get) => ({
   setNotes: (notes) => {
     const normalized = notes.map((note) => ({
       ...note,
+      textAnnotations: note.textAnnotations ?? [],
       viewport: {
         offsetX: note.viewport?.offsetX ?? 0,
         offsetY: note.viewport?.offsetY ?? 0,
@@ -170,13 +173,41 @@ export const useNoteStore = create<NoteState>((set, get) => ({
         if (note.id !== noteId) {
           return note;
         }
-        const filtered = note.strokes.filter((stroke) => !strokeIntersectsCircle(stroke, x, y, radius));
-        if (filtered.length === note.strokes.length) {
+        
+        // Filter out strokes that intersect with the eraser
+        const filteredStrokes = note.strokes.filter((stroke) => !strokeIntersectsCircle(stroke, x, y, radius));
+        
+        // Filter out text annotations that intersect with the eraser
+        const filteredAnnotations = (note.textAnnotations ?? []).filter((annotation) => {
+          // Check if eraser circle intersects with text annotation bounding box
+          // Account for multiline text
+          const lines = annotation.text.split('\n');
+          const textWidth = Math.max(...lines.map(line => line.length)) * annotation.fontSize * 0.6; // Rough estimate
+          const lineHeight = annotation.fontSize * 1.1; // Match rendering line height
+          const textHeight = lines.length * lineHeight;
+          
+          // Find closest point on the rectangle to the circle center
+          const closestX = Math.max(annotation.x, Math.min(x, annotation.x + textWidth));
+          const closestY = Math.max(annotation.y, Math.min(y, annotation.y + textHeight));
+          
+          // Calculate distance between circle center and closest point
+          const distanceX = x - closestX;
+          const distanceY = y - closestY;
+          const distanceSquared = distanceX * distanceX + distanceY * distanceY;
+          
+          // Return true to keep (not erase), false to erase
+          return distanceSquared > radius * radius;
+        });
+        
+        if (filteredStrokes.length === note.strokes.length && 
+            filteredAnnotations.length === (note.textAnnotations ?? []).length) {
           return note;
         }
+        
         return {
           ...note,
-          strokes: filtered,
+          strokes: filteredStrokes,
+          textAnnotations: filteredAnnotations,
           undoneStrokes: [],
           updatedAt: now(),
         };
@@ -284,6 +315,19 @@ export const useNoteStore = create<NoteState>((set, get) => ({
           updatedAt: now(),
         };
       }),
+    }));
+  },
+  addTextAnnotation: (noteId, annotation) => {
+    set((state) => ({
+      notes: state.notes.map((note) =>
+        note.id === noteId
+          ? {
+              ...note,
+              textAnnotations: [...(note.textAnnotations ?? []), annotation],
+              updatedAt: now(),
+            }
+          : note,
+      ),
     }));
   },
   undoInk: () => {
@@ -398,6 +442,7 @@ export const useNoteStore = create<NoteState>((set, get) => ({
       text: bundle.note.text || "",
       strokes: bundle.note.strokes || [],
       undoneStrokes: [],
+      textAnnotations: [],
       viewport: { offsetX: 0, offsetY: 0, scale: 1 },
       createdAt: stamp,
       updatedAt: stamp,

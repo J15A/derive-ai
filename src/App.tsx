@@ -39,6 +39,7 @@ export default function App(): JSX.Element {
     moveStrokes,
     duplicateStrokes,
     changeStrokesColor,
+    addTextAnnotation,
     panViewport,
     zoomViewportAt,
     resetViewport,
@@ -244,6 +245,7 @@ export default function App(): JSX.Element {
             onMoveStrokes={moveStrokes}
             onDuplicateStrokes={duplicateStrokes}
             onChangeStrokesColor={changeStrokesColor}
+            onAddTextAnnotation={addTextAnnotation}
             onPanViewport={panViewport}
             onZoomViewportAt={zoomViewportAt}
             onResetViewport={resetViewport}

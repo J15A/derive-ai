@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import type { InkPoint, InkStroke, InkTool, Note } from "../types";
-import { drawStrokePolygon, strokePolygon, uid } from "../utils/ink";
+import type { InkPoint, InkStroke, InkTool, Note, TextAnnotation } from "../types";
+import { drawStrokePolygon, strokePolygon, strokesToPngDataUrl, uid } from "../utils/ink";
+import { solveEquation } from "../api/client";
 import { SelectionPopup } from "./SelectionPopup";
 
 interface InkCanvasProps {
@@ -16,6 +17,7 @@ interface InkCanvasProps {
   onMoveStrokes: (noteId: string, strokeIds: string[], dx: number, dy: number) => void;
   onDuplicateStrokes: (noteId: string, strokeIds: string[]) => string[];
   onChangeStrokesColor: (noteId: string, strokeIds: string[], newColor: string) => void;
+  onAddTextAnnotation: (noteId: string, annotation: TextAnnotation) => void;
   onPanViewport: (noteId: string, dx: number, dy: number) => void;
   onZoomViewportAt: (noteId: string, nextScale: number, anchorX: number, anchorY: number) => void;
   onExportReady?: (exportFn: () => string) => void;
@@ -36,6 +38,7 @@ export function InkCanvas({
   onMoveStrokes,
   onDuplicateStrokes,
   onChangeStrokesColor,
+  onAddTextAnnotation,
   onPanViewport,
   onZoomViewportAt,
   onExportReady,
@@ -57,6 +60,7 @@ export function InkCanvas({
   const [eraserTrail, setEraserTrail] = useState<{ x: number; y: number }[]>([]);
   const [showPopup, setShowPopup] = useState(false);
   const [popupPosition, setPopupPosition] = useState<{ x: number; y: number }>({ x: 0, y: 0 });
+  const [isSolving, setIsSolving] = useState(false);
 
   const drawScene = useCallback(() => {
     const canvas = canvasRef.current;
@@ -126,6 +130,32 @@ export function InkCanvas({
           ctx.fill();
         }
       }
+      
+      ctx.restore();
+    }
+    
+    // Render text annotations in world coordinates with handwritten style
+    for (const annotation of note.textAnnotations ?? []) {
+      ctx.save();
+      
+      // Use Caveat - a natural handwriting font
+      ctx.font = `700 ${annotation.fontSize}px "Caveat", "Bradley Hand", "Brush Script MT", cursive`;
+      ctx.fillStyle = annotation.color;
+      ctx.textBaseline = "top";
+      
+      // Add subtle shadow for depth
+      ctx.shadowColor = "rgba(0, 0, 0, 0.08)";
+      ctx.shadowBlur = 1.5 / note.viewport.scale;
+      ctx.shadowOffsetX = 0.5 / note.viewport.scale;
+      ctx.shadowOffsetY = 0.5 / note.viewport.scale;
+      
+      // Split text by newlines and render each line
+      const lines = annotation.text.split('\n');
+      const lineHeight = annotation.fontSize * 1.1; // Tighter line spacing (1.1x)
+      
+      lines.forEach((line, index) => {
+        ctx.fillText(line, annotation.x, annotation.y + (index * lineHeight));
+      });
       
       ctx.restore();
     }
@@ -213,7 +243,7 @@ export function InkCanvas({
     
     // Draw eraser trail
     if (eraserTrail.length > 1 && tool === "eraser") {
-      const currentSize = tool === "highlighter" ? highlighterSize : penSize;
+      const currentSize = penSize;
       ctx.strokeStyle = "rgba(156, 163, 175, 0.4)"; // Faint grey
       ctx.lineWidth = Math.max(2, currentSize * 0.5) / note.viewport.scale;
       ctx.lineCap = "round";
@@ -671,24 +701,62 @@ export function InkCanvas({
     setShowPopup(false);
   };
 
-  const handlePopupSolve = () => {
-    // Get the selected strokes
+  const handlePopupSolve = async () => {
     const selectedStrokeObjects = note.strokes.filter(stroke => 
       selectedStrokes.includes(stroke.id)
     );
-    
-    // Placeholder for solving logic
-    // In the future, this could:
-    // 1. Convert strokes to an image
-    // 2. Send to an OCR/handwriting recognition API
-    // 3. Parse the equation
-    // 4. Solve it mathematically
-    // 5. Display the result
-    
-    console.log('Solving equation from selected strokes:', selectedStrokeObjects);
-    alert('Solve feature coming soon! Selected ' + selectedStrokes.length + ' strokes.');
-    
-    setShowPopup(false);
+
+    if (selectedStrokeObjects.length === 0) return;
+
+    setIsSolving(true);
+
+    try {
+      // Render selected strokes to a PNG image
+      const imageDataUrl = strokesToPngDataUrl(selectedStrokeObjects);
+
+      // Send to Gemini via the backend
+      const result = await solveEquation(imageDataUrl);
+
+      // Calculate position and size based on the selection bounding box
+      let minX = Infinity;
+      let minY = Infinity;
+      let maxX = -Infinity;
+      let maxY = -Infinity;
+      let totalSize = 0;
+
+      for (const stroke of selectedStrokeObjects) {
+        totalSize += stroke.baseSize;
+        for (const p of stroke.points) {
+          minX = Math.min(minX, p.x);
+          minY = Math.min(minY, p.y);
+          maxX = Math.max(maxX, p.x);
+          maxY = Math.max(maxY, p.y);
+        }
+      }
+
+      // Calculate average stroke size and use it for font size (much larger)
+      const avgStrokeSize = totalSize / selectedStrokeObjects.length;
+      const fontSize = Math.max(80, avgStrokeSize * 15); // Much bigger: at least 80px, scale 15x with stroke size
+      const textY = maxY + fontSize * 0.3; // Add spacing proportional to font size
+
+      const annotation: TextAnnotation = {
+        id: uid(),
+        x: minX,
+        y: textY,
+        text: result,
+        fontSize,
+        color: "#3B82F6",
+      };
+
+      onAddTextAnnotation(note.id, annotation);
+    } catch (error) {
+      console.error("Failed to solve equation:", error);
+      const message = error instanceof Error ? error.message : "Failed to solve equation";
+      alert(message);
+    } finally {
+      setIsSolving(false);
+      setShowPopup(false);
+    }
   };
 
   const handlePopupChangeColor = (newColor: string) => {
@@ -711,9 +779,11 @@ export function InkCanvas({
         onPointerCancel={handlePointerUp}
         onWheel={handleWheel}
       />
+      
       {showPopup && (
         <SelectionPopup
           position={popupPosition}
+          isSolving={isSolving}
           onDelete={handlePopupDelete}
           onDuplicate={handlePopupDuplicate}
           onChangeColor={handlePopupChangeColor}
