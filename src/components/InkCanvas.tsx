@@ -724,8 +724,15 @@ export function InkCanvas({
       // Render selected strokes to a PNG image
       const imageDataUrl = strokesToPngDataUrl(selectedStrokeObjects);
 
-      // Send to Gemini via the backend
+      // Send to backend via API
       const result = await solveEquation(imageDataUrl);
+
+      // Check if equation was not recognized
+      if (result.toLowerCase().includes("could not recognize")) {
+        // Show a friendly error message instead of adding text annotation
+        alert("⚠️ Unable to recognize the equation\n\nPlease make sure your handwriting is clear and try again.");
+        return;
+      }
 
       // Calculate position and size based on the selection bounding box
       let minX = Infinity;
@@ -759,10 +766,17 @@ export function InkCanvas({
       };
 
       onAddTextAnnotation(note.id, annotation);
+      
+      // Force immediate redraw to show the solution
+      scheduleDraw();
+      
+      // Clear selection so user can see the solution immediately
+      setSelectedStrokes([]);
+      setSelectionBox(null);
     } catch (error) {
       console.error("Failed to solve equation:", error);
       const message = error instanceof Error ? error.message : "Failed to solve equation";
-      alert(message);
+      alert(`❌ Error solving equation\n\n${message}`);
     } finally {
       setIsSolving(false);
       setShowPopup(false);

@@ -39,7 +39,7 @@ router.post("/", async (req: Request, res: Response) => {
               },
               {
                 type: "text",
-                text: "Recognize the handwritten math in this image and solve it step-by-step. Show ONLY the mathematical expressions, NO explanatory text. Each step should be pure math on a new line. Use Unicode math symbols: ∫ (integral), ² ³ (superscripts), ₀ ₁ (subscripts), √, π, ∞, ÷, ×, ≈, ≠, ≤, ≥, ∑, ∏, etc.\n\nExample format:\n2x + 4 = 10\n2x = 6\nx = 3\n\nFor simple problems (like 2+2), just show: '2 + 2 = 4'. For complex problems, show 2-4 steps of pure math. NO words like 'Problem:', 'Step 1:', 'Subtract', etc. If you cannot recognize valid math, reply with: Could not recognize equation",
+                text: "Recognize the handwritten math in this image and solve it. CRITICAL: DO NOT repeat or rewrite the original equation/expression/integral/derivative that was given in the image. Your response must START with the first solution step or the answer, NOT the problem itself.\n\nShow ONLY solution steps and final answer as pure mathematical expressions. NO explanatory text. Each step on a new line. Use Unicode math symbols: ∫ (integral), ² ³ (superscripts), ₀ ₁ (subscripts), √, π, ∞, ÷, ×, ≈, ≠, ≤, ≥, ∑, ∏, etc.\n\nExamples:\nIf image shows '2x + 4 = 10', respond with:\n2x = 6\nx = 3\n\nIf image shows '2+2', respond with:\n= 4\n\nIf image shows '∫x dx', respond with:\n= x²/2 + C\n\nIf image shows 'd/dx(x²)', respond with:\n= 2x\n\nNEVER start your response by restating the problem. Show 1-4 solution steps maximum. NO words like 'Problem:', 'Step 1:', 'Given:', 'Solving:', etc. If you cannot recognize valid math, reply with: Could not recognize equation",
               },
             ],
           },
