@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import type { Note, NoteBundle, InkTool, TextAnnotation } from "../types";
+import type { Note, NoteBundle, InkTool, TextAnnotation, WhiteboardImage } from "../types";
 import { buildNoteBundle } from "../store/noteStore";
 import { strokesToPngDataUrl } from "../utils/ink";
+import { uid } from "../utils/ink";
 import { InkCanvas } from "./InkCanvas";
 import { TextEditor } from "./TextEditor";
 import { GraphPanel } from "./GraphPanel";
@@ -30,6 +31,11 @@ interface NoteEditorProps {
   onDuplicateStrokes: (noteId: string, strokeIds: string[]) => string[];
   onChangeStrokesColor: (noteId: string, strokeIds: string[], newColor: string) => void;
   onAddTextAnnotation: (noteId: string, annotation: TextAnnotation) => void;
+  onAddImage: (noteId: string, image: WhiteboardImage) => void;
+  onDeleteImages: (noteId: string, imageIds: string[]) => void;
+  onMoveImages: (noteId: string, imageIds: string[], dx: number, dy: number) => void;
+  onScaleStrokes: (noteId: string, strokeIds: string[], scale: number, centerX: number, centerY: number) => void;
+  onScaleImages: (noteId: string, imageIds: string[], scale: number, centerX: number, centerY: number) => void;
   onPanViewport: (noteId: string, dx: number, dy: number) => void;
   onZoomViewportAt: (noteId: string, nextScale: number, anchorX: number, anchorY: number) => void;
   onResetViewport: () => void;
@@ -67,6 +73,11 @@ export function NoteEditor({
   onAppendStroke,
   onEraseAt,
   onDeleteStrokes,
+  onAddImage,
+  onDeleteImages,
+  onMoveImages,
+  onScaleStrokes,
+  onScaleImages,
   onMoveStrokes,
   onDuplicateStrokes,
   onChangeStrokesColor,
@@ -162,6 +173,55 @@ export function NoteEditor({
     onImportBundle(parsed);
   };
 
+  const handleUploadImage = async (file: File) => {
+    if (!safeNote) return;
+    
+    return new Promise<void>((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        const dataUrl = e.target?.result as string;
+        if (!dataUrl) {
+          reject(new Error("Failed to read image"));
+          return;
+        }
+        
+        // Load image to get dimensions
+        const img = new Image();
+        img.onload = () => {
+          // Place image at center of viewport
+          const centerX = -safeNote.viewport.offsetX / safeNote.viewport.scale + (window.innerWidth / 2) / safeNote.viewport.scale;
+          const centerY = -safeNote.viewport.offsetY / safeNote.viewport.scale + (window.innerHeight / 2) / safeNote.viewport.scale;
+          
+          // Scale image to reasonable size (max 400px width)
+          const maxWidth = 400;
+          let width = img.width;
+          let height = img.height;
+          if (width > maxWidth) {
+            height = (height * maxWidth) / width;
+            width = maxWidth;
+          }
+          
+          const image: WhiteboardImage = {
+            id: uid(),
+            dataUrl,
+            x: centerX - width / 2,
+            y: centerY - height / 2,
+            width,
+            height,
+            createdAt: Date.now(),
+          };
+          
+          onAddImage(safeNote.id, image);
+          resolve();
+        };
+        img.onerror = () => reject(new Error("Failed to load image"));
+        img.src = dataUrl;
+      };
+      reader.onerror = () => reject(new Error("Failed to read file"));
+      reader.readAsDataURL(file);
+    });
+  };
+
   return (
     <main className="flex h-full min-h-0 min-w-0 flex-col overflow-hidden rounded-2xl border border-slate-200 bg-panel shadow-soft" ref={rootRef}>
       <Toolbar
@@ -201,6 +261,12 @@ export function NoteEditor({
             window.alert(message);
           });
         }}
+        onUploadImage={(file) => {
+          handleUploadImage(file).catch((error: unknown) => {
+            const message = error instanceof Error ? error.message : "Failed to upload image";
+            window.alert(message);
+          });
+        }}
       />
 
       <div className="relative min-h-0 min-w-0 flex-1">
@@ -218,6 +284,10 @@ export function NoteEditor({
           onDuplicateStrokes={onDuplicateStrokes}
           onChangeStrokesColor={onChangeStrokesColor}
           onAddTextAnnotation={onAddTextAnnotation}
+          onDeleteImages={onDeleteImages}
+          onMoveImages={onMoveImages}
+          onScaleStrokes={onScaleStrokes}
+          onScaleImages={onScaleImages}
           onPanViewport={onPanViewport}
           onZoomViewportAt={onZoomViewportAt}
           onAddToGraph={handleAddToGraph}

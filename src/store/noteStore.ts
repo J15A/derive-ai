@@ -1,5 +1,5 @@
 import { create } from "zustand";
-import type { InkStroke, InkTool, Note, NoteBundle, TextAnnotation } from "../types";
+import type { InkStroke, InkTool, Note, NoteBundle, TextAnnotation, WhiteboardImage } from "../types";
 import { strokeIntersectsCircle, strokesToPngDataUrl, uid } from "../utils/ink";
 
 const now = () => Date.now();
@@ -11,6 +11,7 @@ function createNote(title = "Untitled Note"): Note {
     title,
     text: "",
     strokes: [],
+    images: [],
     undoneStrokes: [],
     textAnnotations: [],
     viewport: { offsetX: 0, offsetY: 0, scale: 1 },
@@ -54,6 +55,11 @@ interface NoteState {
   duplicateStrokes: (noteId: string, strokeIds: string[]) => string[];
   changeStrokesColor: (noteId: string, strokeIds: string[], newColor: string) => void;
   addTextAnnotation: (noteId: string, annotation: TextAnnotation) => void;
+  addImage: (noteId: string, image: WhiteboardImage) => void;
+  deleteImages: (noteId: string, imageIds: string[]) => void;
+  moveImages: (noteId: string, imageIds: string[], dx: number, dy: number) => void;
+  scaleStrokes: (noteId: string, strokeIds: string[], scale: number, centerX: number, centerY: number) => void;
+  scaleImages: (noteId: string, imageIds: string[], scale: number, centerX: number, centerY: number) => void;
   undoInk: () => void;
   redoInk: () => void;
   clearInk: () => void;
@@ -330,6 +336,93 @@ export const useNoteStore = create<NoteState>((set, get) => ({
       ),
     }));
   },
+  addImage: (noteId, image) => {
+    set((state) => ({
+      notes: state.notes.map((note) =>
+        note.id === noteId
+          ? { ...note, images: [...note.images, image], updatedAt: now() }
+          : note,
+      ),
+    }));
+  },
+  deleteImages: (noteId, imageIds) => {
+    set((state) => ({
+      notes: state.notes.map((note) =>
+        note.id === noteId
+          ? {
+              ...note,
+              images: note.images.filter((img) => !imageIds.includes(img.id)),
+              updatedAt: now(),
+            }
+          : note,
+      ),
+    }));
+  },
+  moveImages: (noteId, imageIds, dx, dy) => {
+    set((state) => ({
+      notes: state.notes.map((note) =>
+        note.id === noteId
+          ? {
+              ...note,
+              images: note.images.map((img) =>
+                imageIds.includes(img.id)
+                  ? { ...img, x: img.x + dx, y: img.y + dy }
+                  : img,
+              ),
+              updatedAt: now(),
+            }
+          : note,
+      ),
+    }));
+  },
+  scaleStrokes: (noteId, strokeIds, scale, centerX, centerY) => {
+    set((state) => ({
+      notes: state.notes.map((note) =>
+        note.id === noteId
+          ? {
+              ...note,
+              strokes: note.strokes.map((stroke) =>
+                strokeIds.includes(stroke.id)
+                  ? {
+                      ...stroke,
+                      points: stroke.points.map((p) => ({
+                        ...p,
+                        x: centerX + (p.x - centerX) * scale,
+                        y: centerY + (p.y - centerY) * scale,
+                      })),
+                      baseSize: stroke.baseSize * scale,
+                    }
+                  : stroke,
+              ),
+              updatedAt: now(),
+            }
+          : note,
+      ),
+    }));
+  },
+  scaleImages: (noteId, imageIds, scale, centerX, centerY) => {
+    set((state) => ({
+      notes: state.notes.map((note) =>
+        note.id === noteId
+          ? {
+              ...note,
+              images: note.images.map((img) =>
+                imageIds.includes(img.id)
+                  ? {
+                      ...img,
+                      x: centerX + (img.x - centerX) * scale,
+                      y: centerY + (img.y - centerY) * scale,
+                      width: img.width * scale,
+                      height: img.height * scale,
+                    }
+                  : img,
+              ),
+              updatedAt: now(),
+            }
+          : note,
+      ),
+    }));
+  },
   undoInk: () => {
     const selectedId = get().selectedNoteId;
     if (!selectedId) {
@@ -441,6 +534,7 @@ export const useNoteStore = create<NoteState>((set, get) => ({
       title: bundle.note.title || "Imported Note",
       text: bundle.note.text || "",
       strokes: bundle.note.strokes || [],
+      images: bundle.note.images || [],
       undoneStrokes: [],
       textAnnotations: [],
       viewport: { offsetX: 0, offsetY: 0, scale: 1 },
@@ -470,6 +564,7 @@ export function buildNoteBundle(note: Note): NoteBundle {
       title: note.title,
       text: note.text,
       strokes: note.strokes,
+      images: note.images,
       inkPngDataUrl: strokesToPngDataUrl(note.strokes),
     },
   };

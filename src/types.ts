@@ -15,6 +15,16 @@ export interface InkStroke {
   points: InkPoint[];
 }
 
+export interface WhiteboardImage {
+  id: string;
+  dataUrl: string;
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  createdAt: number;
+}
+
 export interface Selection {
   id: string;
   x: number;
@@ -46,6 +56,7 @@ export interface Note {
   title: string;
   text: string;
   strokes: InkStroke[];
+  images: WhiteboardImage[];
   undoneStrokes: InkStroke[];
   textAnnotations: TextAnnotation[];
   viewport: CanvasViewport;
@@ -60,6 +71,7 @@ export interface NoteBundle {
     title: string;
     text: string;
     strokes: InkStroke[];
+    images: WhiteboardImage[];
     inkPngDataUrl: string;
   };
 }

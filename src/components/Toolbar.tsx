@@ -51,6 +51,7 @@ interface ToolbarProps {
   onExportPng: () => void;
   onExportBundle: () => void;
   onImportBundle: (file: File) => void;
+  onUploadImage: (file: File) => void;
 }
 
 const HIGHLIGHTER_COLORS = [
@@ -96,6 +97,7 @@ export function Toolbar({
   onExportPng,
   onExportBundle,
   onImportBundle,
+  onUploadImage,
 }: ToolbarProps): JSX.Element {
   const settingsRef = useRef<HTMLDetailsElement | null>(null);
   const [showPenMenu, setShowPenMenu] = useState(false);
@@ -365,6 +367,24 @@ export function Toolbar({
                 />
               </label>
             </div>
+          </div>
+          <div className="border-t border-slate-200 pt-3">
+            <label className="btn relative flex w-full cursor-pointer items-center justify-center gap-2 overflow-hidden" title="Upload Image">
+              <Image size={18} />
+              <span className="text-sm">Upload Image</span>
+              <input
+                type="file"
+                accept="image/*"
+                className="absolute inset-0 cursor-pointer opacity-0"
+                onChange={(e) => {
+                  const file = e.target.files?.[0];
+                  if (file) {
+                    onUploadImage(file);
+                    e.currentTarget.value = "";
+                  }
+                }}
+              />
+            </label>
           </div>
         </div>
       </details>

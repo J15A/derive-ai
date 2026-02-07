@@ -19,6 +19,10 @@ interface InkCanvasProps {
   onDuplicateStrokes: (noteId: string, strokeIds: string[]) => string[];
   onChangeStrokesColor: (noteId: string, strokeIds: string[], newColor: string) => void;
   onAddTextAnnotation: (noteId: string, annotation: TextAnnotation) => void;
+  onDeleteImages: (noteId: string, imageIds: string[]) => void;
+  onMoveImages: (noteId: string, imageIds: string[], dx: number, dy: number) => void;
+  onScaleStrokes: (noteId: string, strokeIds: string[], scale: number, centerX: number, centerY: number) => void;
+  onScaleImages: (noteId: string, imageIds: string[], scale: number, centerX: number, centerY: number) => void;
   onPanViewport: (noteId: string, dx: number, dy: number) => void;
   onZoomViewportAt: (noteId: string, nextScale: number, anchorX: number, anchorY: number) => void;
   onAddToGraph?: (latex: string) => void;
@@ -38,6 +42,10 @@ export function InkCanvas({
   onEraseAt,
   onDeleteStrokes,
   onMoveStrokes,
+  onDeleteImages,
+  onMoveImages,
+  onScaleStrokes,
+  onScaleImages,
   onDuplicateStrokes,
   onChangeStrokesColor,
   onAddTextAnnotation,
@@ -58,7 +66,11 @@ export function InkCanvas({
   
   const [selectionBox, setSelectionBox] = useState<{ startX: number; startY: number; endX: number; endY: number } | null>(null);
   const [selectedStrokes, setSelectedStrokes] = useState<string[]>([]);
+  const [selectedImages, setSelectedImages] = useState<string[]>([]);
   const [isDraggingSelection, setIsDraggingSelection] = useState(false);
+  const [isResizing, setIsResizing] = useState(false);
+  const [resizeHandle, setResizeHandle] = useState<string | null>(null);
+  const [resizeStart, setResizeStart] = useState<{ x: number; y: number; bounds: { minX: number; minY: number; maxX: number; maxY: number } } | null>(null);
   const [dragOffset, setDragOffset] = useState<{ x: number; y: number } | null>(null);
   const [eraserTrail, setEraserTrail] = useState<{ x: number; y: number }[]>([]);
   const [showPopup, setShowPopup] = useState(false);
@@ -67,6 +79,7 @@ export function InkCanvas({
   const [isGraphing, setIsGraphing] = useState(false);
   const [textInput, setTextInput] = useState<{ x: number; y: number; worldX: number; worldY: number } | null>(null);
   const [textValue, setTextValue] = useState("");
+  const [loadedImages, setLoadedImages] = useState<Map<string, HTMLImageElement>>(new Map());
 
   const drawScene = useCallback(() => {
     const canvas = canvasRef.current;
@@ -166,8 +179,16 @@ export function InkCanvas({
       ctx.restore();
     }
     
-    // Draw single bounding box for all selected strokes
-    if (selectedStrokes.length > 0 && tool === "selector") {
+    // Draw images
+    for (const image of note.images) {
+      const img = loadedImages.get(image.id);
+      if (img && img.complete) {
+        ctx.drawImage(img, image.x, image.y, image.width, image.height);
+      }
+    }
+    
+    // Draw single bounding box for all selected strokes and images
+    if ((selectedStrokes.length > 0 || selectedImages.length > 0) && tool === "selector") {
       let minX = Infinity;
       let minY = Infinity;
       let maxX = -Infinity;
@@ -187,12 +208,39 @@ export function InkCanvas({
         }
       }
       
+      for (const image of note.images) {
+        if (selectedImages.includes(image.id)) {
+          minX = Math.min(minX, image.x);
+          minY = Math.min(minY, image.y);
+          maxX = Math.max(maxX, image.x + image.width);
+          maxY = Math.max(maxY, image.y + image.height);
+        }
+      }
+      
       if (minX !== Infinity && maxX !== -Infinity) {
         ctx.strokeStyle = "#3b82f6";
         ctx.lineWidth = 2 / note.viewport.scale;
         ctx.setLineDash([5 / note.viewport.scale, 5 / note.viewport.scale]);
         ctx.strokeRect(minX - 5, minY - 5, maxX - minX + 10, maxY - minY + 10);
         ctx.setLineDash([]);
+        
+        // Draw resize handles at corners
+        const handleSize = 8 / note.viewport.scale;
+        ctx.fillStyle = "#ffffff";
+        ctx.strokeStyle = "#3b82f6";
+        ctx.lineWidth = 2 / note.viewport.scale;
+        
+        const handles = [
+          { x: minX - 5, y: minY - 5, id: "nw" },
+          { x: maxX + 5, y: minY - 5, id: "ne" },
+          { x: maxX + 5, y: maxY + 5, id: "se" },
+          { x: minX - 5, y: maxY + 5, id: "sw" },
+        ];
+        
+        for (const handle of handles) {
+          ctx.fillRect(handle.x - handleSize / 2, handle.y - handleSize / 2, handleSize, handleSize);
+          ctx.strokeRect(handle.x - handleSize / 2, handle.y - handleSize / 2, handleSize, handleSize);
+        }
       }
     }
 
@@ -263,7 +311,7 @@ export function InkCanvas({
     }
 
     ctx.restore();
-  }, [color, note.strokes, note.viewport.offsetX, note.viewport.offsetY, note.viewport.scale, showGrid, penSize, highlighterSize, tool, selectedStrokes, selectionBox, eraserTrail]);
+  }, [color, note.strokes, note.images, note.viewport.offsetX, note.viewport.offsetY, note.viewport.scale, showGrid, penSize, highlighterSize, tool, selectedStrokes, selectedImages, selectionBox, eraserTrail, loadedImages]);
 
   const scheduleDraw = useCallback(() => {
     if (rafRef.current !== null) {
@@ -314,24 +362,59 @@ export function InkCanvas({
     scheduleDraw();
   }, [note, tool, penSize, highlighterSize, color, scheduleDraw]);
 
+  // Load images when they change
+  useEffect(() => {
+    const newLoadedImages = new Map(loadedImages);
+    let hasChanges = false;
+
+    for (const image of note.images) {
+      if (!newLoadedImages.has(image.id)) {
+        const img = new Image();
+        img.src = image.dataUrl;
+        newLoadedImages.set(image.id, img);
+        hasChanges = true;
+        
+        img.onload = () => {
+          scheduleDraw();
+        };
+      }
+    }
+
+    // Remove images that no longer exist
+    for (const [id] of newLoadedImages) {
+      if (!note.images.some((img) => img.id === id)) {
+        newLoadedImages.delete(id);
+        hasChanges = true;
+      }
+    }
+
+    if (hasChanges) {
+      setLoadedImages(newLoadedImages);
+    }
+  }, [note.images, scheduleDraw, loadedImages]);
+
   useEffect(() => {
     // Clear selection when switching away from selector tool
-    if (tool !== "selector" && selectedStrokes.length > 0) {
+    if (tool !== "selector" && (selectedStrokes.length > 0 || selectedImages.length > 0)) {
       setSelectedStrokes([]);
+      setSelectedImages([]);
       setSelectionBox(null);
       setShowPopup(false);
+      setIsResizing(false);
+      setResizeHandle(null);
+      setResizeStart(null);
     }
     
     // Clear eraser trail when switching tools
     if (tool !== "eraser") {
       setEraserTrail([]);
     }
-  }, [tool, selectedStrokes.length]);
+  }, [tool, selectedStrokes.length, selectedImages.length]);
 
-  // Show popup below selection when strokes are selected
+  // Show popup below selection when strokes or images are selected
   useEffect(() => {
-    if (selectedStrokes.length > 0 && tool === "selector" && !isDraggingSelection) {
-      // Calculate bounding box of selected strokes in world space
+    if ((selectedStrokes.length > 0 || selectedImages.length > 0) && tool === "selector" && !isDraggingSelection) {
+      // Calculate bounding box of selected strokes and images in world space
       let minX = Infinity;
       let minY = Infinity;
       let maxX = -Infinity;
@@ -348,6 +431,15 @@ export function InkCanvas({
             maxX = Math.max(maxX, ...xs);
             maxY = Math.max(maxY, ...ys);
           }
+        }
+      }
+      
+      for (const image of note.images) {
+        if (selectedImages.includes(image.id)) {
+          minX = Math.min(minX, image.x);
+          minY = Math.min(minY, image.y);
+          maxX = Math.max(maxX, image.x + image.width);
+          maxY = Math.max(maxY, image.y + image.height);
         }
       }
       
@@ -495,7 +587,10 @@ export function InkCanvas({
 
     e.preventDefault();
 
-    if (tool === "pan") {
+    // Allow panning with middle mouse button for any tool
+    const shouldPan = e.button === 1 || tool === "pan";
+    
+    if (shouldPan) {
       panPointerId.current = e.pointerId;
       lastPanRef.current = { x: e.clientX, y: e.clientY };
       canvas.setPointerCapture(e.pointerId);
@@ -523,7 +618,72 @@ export function InkCanvas({
     if (tool === "selector") {
       const point = toWorldPoint(e.clientX, e.clientY);
       
-      // Check if clicking on selected strokes to drag
+      // First check if clicking on a resize handle
+      if (selectedStrokes.length > 0 || selectedImages.length > 0) {
+        let minX = Infinity;
+        let minY = Infinity;
+        let maxX = -Infinity;
+        let maxY = -Infinity;
+        
+        for (const stroke of note.strokes) {
+          if (selectedStrokes.includes(stroke.id)) {
+            const points = stroke.points;
+            if (points.length > 0) {
+              const xs = points.map(p => p.x);
+              const ys = points.map(p => p.y);
+              minX = Math.min(minX, ...xs);
+              minY = Math.min(minY, ...ys);
+              maxX = Math.max(maxX, ...xs);
+              maxY = Math.max(maxY, ...ys);
+            }
+          }
+        }
+        
+        for (const image of note.images) {
+          if (selectedImages.includes(image.id)) {
+            minX = Math.min(minX, image.x);
+            minY = Math.min(minY, image.y);
+            maxX = Math.max(maxX, image.x + image.width);
+            maxY = Math.max(maxY, image.y + image.height);
+          }
+        }
+        
+        if (minX !== Infinity && maxX !== -Infinity) {
+          const handleSize = 8 / note.viewport.scale;
+          const tolerance = handleSize;
+          
+          const handles = [
+            { x: minX - 5, y: minY - 5, id: "nw" },
+            { x: maxX + 5, y: minY - 5, id: "ne" },
+            { x: maxX + 5, y: maxY + 5, id: "se" },
+            { x: minX - 5, y: maxY + 5, id: "sw" },
+          ];
+          
+          for (const handle of handles) {
+            if (Math.abs(point.x - handle.x) <= tolerance && Math.abs(point.y - handle.y) <= tolerance) {
+              setIsResizing(true);
+              setResizeHandle(handle.id);
+              setResizeStart({ 
+                x: point.x, 
+                y: point.y, 
+                bounds: { minX: minX - 5, minY: minY - 5, maxX: maxX + 5, maxY: maxY + 5 }
+              });
+              drawingPointerId.current = e.pointerId;
+              canvas.setPointerCapture(e.pointerId);
+              return;
+            }
+          }
+        }
+      }
+      
+      // Check if clicking on a selected image first (images are on top)
+      const clickedImage = note.images.find(image => {
+        if (!selectedImages.includes(image.id)) return false;
+        return point.x >= image.x && point.x <= image.x + image.width &&
+               point.y >= image.y && point.y <= image.y + image.height;
+      });
+      
+      // Then check if clicking on selected strokes
       const clickedStroke = note.strokes.find(stroke => {
         if (!selectedStrokes.includes(stroke.id)) return false;
         const points = stroke.points;
@@ -540,7 +700,7 @@ export function InkCanvas({
                point.y >= minY - 5 && point.y <= maxY + 5;
       });
       
-      if (clickedStroke) {
+      if (clickedImage || clickedStroke) {
         setIsDraggingSelection(true);
         setDragOffset({ x: point.x, y: point.y });
         drawingPointerId.current = e.pointerId;
@@ -569,7 +729,8 @@ export function InkCanvas({
       return;
     }
 
-    if (tool === "pan" && panPointerId.current === e.pointerId && lastPanRef.current) {
+    // Handle panning for any tool when triggered
+    if (panPointerId.current === e.pointerId && lastPanRef.current) {
       const dx = e.clientX - lastPanRef.current.x;
       const dy = e.clientY - lastPanRef.current.y;
       lastPanRef.current = { x: e.clientX, y: e.clientY };
@@ -605,10 +766,75 @@ export function InkCanvas({
     if (tool === "selector") {
       const point = toWorldPoint(e.clientX, e.clientY);
       
-      if (isDraggingSelection && dragOffset) {
+      if (isResizing && resizeStart && resizeHandle) {
+        // Calculate scale based on resize handle movement
+        const bounds = resizeStart.bounds;
+        const centerX = (bounds.minX + bounds.maxX) / 2;
+        const centerY = (bounds.minY + bounds.maxY) / 2;
+        
+        let scale = 1;
+        
+        if (resizeHandle === "se") {
+          // Bottom-right: scale based on distance from top-left
+          const originalDist = Math.sqrt(
+            Math.pow(bounds.maxX - bounds.minX, 2) + Math.pow(bounds.maxY - bounds.minY, 2)
+          );
+          const newDist = Math.sqrt(
+            Math.pow(point.x - bounds.minX, 2) + Math.pow(point.y - bounds.minY, 2)
+          );
+          scale = newDist / originalDist;
+        } else if (resizeHandle === "nw") {
+          // Top-left: scale based on distance from bottom-right
+          const originalDist = Math.sqrt(
+            Math.pow(bounds.maxX - bounds.minX, 2) + Math.pow(bounds.maxY - bounds.minY, 2)
+          );
+          const newDist = Math.sqrt(
+            Math.pow(bounds.maxX - point.x, 2) + Math.pow(bounds.maxY - point.y, 2)
+          );
+          scale = newDist / originalDist;
+        } else if (resizeHandle === "ne") {
+          // Top-right: scale based on distance from bottom-left
+          const originalDist = Math.sqrt(
+            Math.pow(bounds.maxX - bounds.minX, 2) + Math.pow(bounds.maxY - bounds.minY, 2)
+          );
+          const newDist = Math.sqrt(
+            Math.pow(point.x - bounds.minX, 2) + Math.pow(bounds.maxY - point.y, 2)
+          );
+          scale = newDist / originalDist;
+        } else if (resizeHandle === "sw") {
+          // Bottom-left: scale based on distance from top-right
+          const originalDist = Math.sqrt(
+            Math.pow(bounds.maxX - bounds.minX, 2) + Math.pow(bounds.maxY - bounds.minY, 2)
+          );
+          const newDist = Math.sqrt(
+            Math.pow(bounds.maxX - point.x, 2) + Math.pow(point.y - bounds.minY, 2)
+          );
+          scale = newDist / originalDist;
+        }
+        
+        // Clamp scale to reasonable values
+        scale = Math.max(0.1, Math.min(10, scale));
+        
+        onScaleStrokes(note.id, selectedStrokes, scale, centerX, centerY);
+        onScaleImages(note.id, selectedImages, scale, centerX, centerY);
+        
+        // Update resize start for next frame
+        setResizeStart({ 
+          x: point.x, 
+          y: point.y, 
+          bounds: {
+            minX: centerX + (bounds.minX - centerX) * scale,
+            minY: centerY + (bounds.minY - centerY) * scale,
+            maxX: centerX + (bounds.maxX - centerX) * scale,
+            maxY: centerY + (bounds.maxY - centerY) * scale,
+          }
+        });
+        scheduleDraw();
+      } else if (isDraggingSelection && dragOffset) {
         const dx = point.x - dragOffset.x;
         const dy = point.y - dragOffset.y;
         onMoveStrokes(note.id, selectedStrokes, dx, dy);
+        onMoveImages(note.id, selectedImages, dx, dy);
         setDragOffset(point);
         scheduleDraw();
       } else if (selectionBox) {
@@ -629,7 +855,8 @@ export function InkCanvas({
       return;
     }
 
-    if (tool === "pan" && panPointerId.current === e.pointerId) {
+    // Handle pan release for any tool
+    if (panPointerId.current === e.pointerId) {
       panPointerId.current = null;
       lastPanRef.current = null;
       canvas.releasePointerCapture(e.pointerId);
@@ -645,24 +872,37 @@ export function InkCanvas({
         // Clear trail when releasing eraser
         setEraserTrail([]);
       } else if (tool === "selector") {
-        if (isDraggingSelection && dragOffset) {
+        if (isResizing) {
+          setIsResizing(false);
+          setResizeHandle(null);
+          setResizeStart(null);
+        } else if (isDraggingSelection && dragOffset) {
           setIsDraggingSelection(false);
           setDragOffset(null);
         } else if (selectionBox) {
-          // Select strokes within the box
+          // Select strokes and images within the box
           const minX = Math.min(selectionBox.startX, selectionBox.endX);
           const maxX = Math.max(selectionBox.startX, selectionBox.endX);
           const minY = Math.min(selectionBox.startY, selectionBox.endY);
           const maxY = Math.max(selectionBox.startY, selectionBox.endY);
           
-          const selected = note.strokes.filter(stroke => {
+          const selectedStrokeIds = note.strokes.filter(stroke => {
             const points = stroke.points;
             if (points.length === 0) return false;
             
             return points.some(p => p.x >= minX && p.x <= maxX && p.y >= minY && p.y <= maxY);
           }).map(s => s.id);
           
-          setSelectedStrokes(selected);
+          const selectedImageIds = note.images.filter(image => {
+            // Check if image intersects with selection box
+            return !(image.x + image.width < minX || 
+                    image.x > maxX || 
+                    image.y + image.height < minY || 
+                    image.y > maxY);
+          }).map(img => img.id);
+          
+          setSelectedStrokes(selectedStrokeIds);
+          setSelectedImages(selectedImageIds);
           setSelectionBox(null);
           scheduleDraw();
         }
@@ -686,13 +926,19 @@ export function InkCanvas({
     onZoomViewportAt(note.id, nextScale, canvasPoint.x, canvasPoint.y);
   };
 
-  // Keyboard handler for deleting selected strokes
+  // Keyboard handler for deleting selected strokes and images
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      if ((e.key === "Backspace" || e.key === "Delete") && selectedStrokes.length > 0 && tool === "selector") {
+      if ((e.key === "Backspace" || e.key === "Delete") && (selectedStrokes.length > 0 || selectedImages.length > 0) && tool === "selector") {
         e.preventDefault();
-        onDeleteStrokes(note.id, selectedStrokes);
+        if (selectedStrokes.length > 0) {
+          onDeleteStrokes(note.id, selectedStrokes);
+        }
+        if (selectedImages.length > 0) {
+          onDeleteImages(note.id, selectedImages);
+        }
         setSelectedStrokes([]);
+        setSelectedImages([]);
       }
     };
 
@@ -700,11 +946,17 @@ export function InkCanvas({
     return () => {
       window.removeEventListener("keydown", handleKeyDown);
     };
-  }, [selectedStrokes, tool, note.id, onDeleteStrokes]);
+  }, [selectedStrokes, selectedImages, tool, note.id, onDeleteStrokes, onDeleteImages]);
 
   const handlePopupDelete = () => {
-    onDeleteStrokes(note.id, selectedStrokes);
+    if (selectedStrokes.length > 0) {
+      onDeleteStrokes(note.id, selectedStrokes);
+    }
+    if (selectedImages.length > 0) {
+      onDeleteImages(note.id, selectedImages);
+    }
     setSelectedStrokes([]);
+    setSelectedImages([]);
     setShowPopup(false);
   };
 
