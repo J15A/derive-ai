@@ -98,7 +98,6 @@ export function InkCanvas({
     ctx.scale(note.viewport.scale, note.viewport.scale);
 
     for (const stroke of note.strokes) {
-      const isSelected = selectedStrokes.includes(stroke.id);
       const opacity = stroke.tool === "highlighter" ? 0.4 : 1;
       
       ctx.save();
@@ -119,23 +118,35 @@ export function InkCanvas({
       }
       
       ctx.restore();
+    }
+    
+    // Draw single bounding box for all selected strokes
+    if (selectedStrokes.length > 0 && tool === "selector") {
+      let minX = Infinity;
+      let minY = Infinity;
+      let maxX = -Infinity;
+      let maxY = -Infinity;
       
-      if (isSelected && tool === "selector") {
-        const points = stroke.points;
-        if (points.length > 0) {
-          const xs = points.map(p => p.x);
-          const ys = points.map(p => p.y);
-          const minX = Math.min(...xs);
-          const minY = Math.min(...ys);
-          const maxX = Math.max(...xs);
-          const maxY = Math.max(...ys);
-          
-          ctx.strokeStyle = "#3b82f6";
-          ctx.lineWidth = 2 / note.viewport.scale;
-          ctx.setLineDash([5 / note.viewport.scale, 5 / note.viewport.scale]);
-          ctx.strokeRect(minX - 5, minY - 5, maxX - minX + 10, maxY - minY + 10);
-          ctx.setLineDash([]);
+      for (const stroke of note.strokes) {
+        if (selectedStrokes.includes(stroke.id)) {
+          const points = stroke.points;
+          if (points.length > 0) {
+            const xs = points.map(p => p.x);
+            const ys = points.map(p => p.y);
+            minX = Math.min(minX, ...xs);
+            minY = Math.min(minY, ...ys);
+            maxX = Math.max(maxX, ...xs);
+            maxY = Math.max(maxY, ...ys);
+          }
         }
+      }
+      
+      if (minX !== Infinity && maxX !== -Infinity) {
+        ctx.strokeStyle = "#3b82f6";
+        ctx.lineWidth = 2 / note.viewport.scale;
+        ctx.setLineDash([5 / note.viewport.scale, 5 / note.viewport.scale]);
+        ctx.strokeRect(minX - 5, minY - 5, maxX - minX + 10, maxY - minY + 10);
+        ctx.setLineDash([]);
       }
     }
 

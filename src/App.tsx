@@ -180,7 +180,7 @@ export default function App(): JSX.Element {
 
   return (
     <div className="h-full bg-gradient-to-b from-slate-100 via-slate-100 to-slate-200 p-3 md:p-4">
-      <div className="mx-auto grid h-full max-w-[1600px] grid-cols-1 gap-3 md:grid-cols-[300px_1fr]">
+      <div className="mx-auto grid h-full max-w-[1800px] grid-cols-1 gap-3 md:grid-cols-[300px_1fr]">
         <Sidebar
           notes={notes}
           selectedNoteId={selectedNote?.id ?? null}
