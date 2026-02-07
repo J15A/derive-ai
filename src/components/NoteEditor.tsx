@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { Note, NoteBundle } from "../types";
 import { buildNoteBundle } from "../store/noteStore";
 import { strokesToPngDataUrl } from "../utils/ink";
@@ -8,18 +8,19 @@ import { Toolbar } from "./Toolbar";
 
 interface NoteEditorProps {
   note: Note | null;
-  activeTab: "ink" | "text";
   textPreview: boolean;
   tool: "pen" | "eraser" | "pan";
   color: string;
   size: number;
-  onTabChange: (tab: "ink" | "text") => void;
-  onTitleChange: (value: string) => void;
+  showGrid: boolean;
+  showTextPanel: boolean;
   onTextChange: (value: string) => void;
   onTogglePreview: () => void;
   onToolChange: (tool: "pen" | "eraser" | "pan") => void;
   onColorChange: (value: string) => void;
   onSizeChange: (value: number) => void;
+  onShowGridChange: (value: boolean) => void;
+  onShowTextPanelChange: (value: boolean) => void;
   onAppendStroke: (noteId: string, stroke: Note["strokes"][number]) => void;
   onEraseAt: (noteId: string, x: number, y: number, radius: number) => void;
   onPanViewport: (noteId: string, dx: number, dy: number) => void;
@@ -43,18 +44,19 @@ function download(name: string, content: string, mimeType: string): void {
 
 export function NoteEditor({
   note,
-  activeTab,
   textPreview,
   tool,
   color,
   size,
-  onTabChange,
-  onTitleChange,
+  showGrid,
+  showTextPanel,
   onTextChange,
   onTogglePreview,
   onToolChange,
   onColorChange,
   onSizeChange,
+  onShowGridChange,
+  onShowTextPanelChange,
   onAppendStroke,
   onEraseAt,
   onPanViewport,
@@ -66,26 +68,54 @@ export function NoteEditor({
   onImportBundle,
 }: NoteEditorProps): JSX.Element {
   const safeNote = useMemo(() => note, [note]);
+  const rootRef = useRef<HTMLElement | null>(null);
+  const [isFullscreen, setIsFullscreen] = useState(false);
+
+  useEffect(() => {
+    const onFullscreenChange = () => {
+      setIsFullscreen(document.fullscreenElement === rootRef.current);
+    };
+
+    document.addEventListener("fullscreenchange", onFullscreenChange);
+    return () => {
+      document.removeEventListener("fullscreenchange", onFullscreenChange);
+    };
+  }, []);
+
+  const toggleFullscreen = useCallback(async () => {
+    if (!rootRef.current) {
+      return;
+    }
+
+    if (document.fullscreenElement === rootRef.current) {
+      await document.exitFullscreen();
+      return;
+    }
+
+    await rootRef.current.requestFullscreen();
+  }, []);
 
   if (!safeNote) {
-    return <main className="editor empty">No note selected.</main>;
+    return (
+      <main className="flex h-full min-h-0 items-center justify-center rounded-2xl border border-slate-200 bg-white shadow-soft" ref={rootRef}>
+        No note selected.
+      </main>
+    );
   }
+
+  const titleSlug = safeNote.title.replace(/\s+/g, "-").toLowerCase() || "note";
 
   const handleExportPng = () => {
     const dataUrl = strokesToPngDataUrl(safeNote.strokes);
     const link = document.createElement("a");
     link.href = dataUrl;
-    link.download = `${safeNote.title.replace(/\s+/g, "-").toLowerCase() || "note"}-ink.png`;
+    link.download = `${titleSlug}-ink.png`;
     link.click();
   };
 
   const handleExportBundle = () => {
     const bundle = buildNoteBundle(safeNote);
-    download(
-      `${safeNote.title.replace(/\s+/g, "-").toLowerCase() || "note"}-bundle.json`,
-      JSON.stringify(bundle, null, 2),
-      "application/json",
-    );
+    download(`${titleSlug}-bundle.json`, JSON.stringify(bundle, null, 2), "application/json");
   };
 
   const handleImportBundle = async (file: File) => {
@@ -98,80 +128,66 @@ export function NoteEditor({
   };
 
   return (
-    <main className="editor">
-      <div className="editor-head">
-        <input
-          className="editor-title"
-          value={safeNote.title}
-          onChange={(e) => onTitleChange(e.target.value)}
-          placeholder="Note title"
-        />
-        <div className="tab-row">
-          <button
-            className={`tab-btn ${activeTab === "ink" ? "active" : ""}`}
-            type="button"
-            onClick={() => onTabChange("ink")}
-          >
-            Ink
-          </button>
-          <button
-            className={`tab-btn ${activeTab === "text" ? "active" : ""}`}
-            type="button"
-            onClick={() => onTabChange("text")}
-          >
-            Text
-          </button>
-        </div>
-      </div>
+    <main className="flex h-full min-h-0 flex-col overflow-hidden rounded-2xl border border-slate-200 bg-panel shadow-soft" ref={rootRef}>
+      <Toolbar
+        tool={tool}
+        color={color}
+        size={size}
+        showGrid={showGrid}
+        showTextPanel={showTextPanel}
+        isFullscreen={isFullscreen}
+        zoomPercent={Math.round(safeNote.viewport.scale * 100)}
+        onToolChange={onToolChange}
+        onColorChange={onColorChange}
+        onSizeChange={onSizeChange}
+        onShowGridChange={onShowGridChange}
+        onShowTextPanelChange={onShowTextPanelChange}
+        onToggleFullscreen={() => {
+          toggleFullscreen().catch((error: unknown) => {
+            const message = error instanceof Error ? error.message : "Fullscreen failed";
+            window.alert(message);
+          });
+        }}
+        onZoomIn={() => onZoomViewportAt(safeNote.id, safeNote.viewport.scale * 1.2, 0, 0)}
+        onZoomOut={() => onZoomViewportAt(safeNote.id, safeNote.viewport.scale / 1.2, 0, 0)}
+        onResetView={onResetViewport}
+        onUndo={onUndo}
+        onRedo={onRedo}
+        onClear={onClear}
+        onExportPng={handleExportPng}
+        onExportBundle={handleExportBundle}
+        onImportBundle={(file) => {
+          handleImportBundle(file).catch((error: unknown) => {
+            const message = error instanceof Error ? error.message : "Failed to import bundle";
+            window.alert(message);
+          });
+        }}
+      />
 
-      {activeTab === "ink" ? (
-        <>
-          <Toolbar
-            tool={tool}
-            color={color}
-            size={size}
-            zoomPercent={Math.round(safeNote.viewport.scale * 100)}
-            onToolChange={onToolChange}
-            onColorChange={onColorChange}
-            onSizeChange={onSizeChange}
-            onZoomIn={() =>
-              onZoomViewportAt(safeNote.id, safeNote.viewport.scale * 1.2, 0, 0)
-            }
-            onZoomOut={() =>
-              onZoomViewportAt(safeNote.id, safeNote.viewport.scale / 1.2, 0, 0)
-            }
-            onResetView={onResetViewport}
-            onUndo={onUndo}
-            onRedo={onRedo}
-            onClear={onClear}
-            onExportPng={handleExportPng}
-            onExportBundle={handleExportBundle}
-            onImportBundle={(file) => {
-              handleImportBundle(file).catch((error: unknown) => {
-                const message = error instanceof Error ? error.message : "Failed to import bundle";
-                window.alert(message);
-              });
-            }}
-          />
-          <InkCanvas
-            note={safeNote}
-            tool={tool}
-            color={color}
-            size={size}
-            onAppendStroke={onAppendStroke}
-            onEraseAt={onEraseAt}
-            onPanViewport={onPanViewport}
-            onZoomViewportAt={onZoomViewportAt}
-          />
-        </>
-      ) : (
-        <TextEditor
-          text={safeNote.text}
-          preview={textPreview}
-          onTextChange={onTextChange}
-          onTogglePreview={onTogglePreview}
+      <div className="relative min-h-0 flex-1">
+        <InkCanvas
+          note={safeNote}
+          tool={tool}
+          color={color}
+          size={size}
+          showGrid={showGrid}
+          onAppendStroke={onAppendStroke}
+          onEraseAt={onEraseAt}
+          onPanViewport={onPanViewport}
+          onZoomViewportAt={onZoomViewportAt}
         />
-      )}
+
+        {showTextPanel ? (
+          <section className="absolute bottom-3 right-3 top-3 z-20 w-[420px] max-w-[calc(100%-1.5rem)] overflow-hidden rounded-xl border border-slate-200 bg-white shadow-2xl max-md:left-3 max-md:w-auto">
+            <TextEditor
+              text={safeNote.text}
+              preview={textPreview}
+              onTextChange={onTextChange}
+              onTogglePreview={onTogglePreview}
+            />
+          </section>
+        ) : null}
+      </div>
     </main>
   );
 }

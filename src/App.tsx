@@ -1,19 +1,22 @@
-import { useEffect, useMemo, useRef } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { loadNotesFromDb, saveNotesToDb } from "./db/database";
 import { NoteEditor } from "./components/NoteEditor";
 import { Sidebar } from "./components/Sidebar";
 import { useNoteStore } from "./store/noteStore";
+
+const UI_SETTINGS_KEY = "deriveAiUiSettings";
 
 export default function App(): JSX.Element {
   const {
     notes,
     selectedNoteId,
     searchQuery,
-    activeTab,
     textPreview,
     tool,
     color,
     size,
+    showGrid,
+    showTextPanel,
     hydrated,
     setHydrated,
     setNotes,
@@ -22,13 +25,13 @@ export default function App(): JSX.Element {
     renameNote,
     deleteNote,
     setSearchQuery,
-    setActiveTab,
     setTextPreview,
-    updateNoteTitle,
     updateNoteText,
     setTool,
     setColor,
     setSize,
+    setShowGrid,
+    setShowTextPanel,
     appendStroke,
     eraseAt,
     panViewport,
@@ -40,6 +43,8 @@ export default function App(): JSX.Element {
     importBundle,
   } = useNoteStore();
 
+  const [isPending, startTransition] = useTransition();
+  const [uiSettingsReady, setUiSettingsReady] = useState(false);
   const selectedNote = useMemo(() => {
     if (!selectedNoteId) {
       return notes[0] ?? null;
@@ -47,6 +52,71 @@ export default function App(): JSX.Element {
     return notes.find((note) => note.id === selectedNoteId) ?? null;
   }, [notes, selectedNoteId]);
   const saveTimerRef = useRef<number | null>(null);
+
+  const handleCreateNote = useCallback(() => {
+    startTransition(() => {
+      createNote();
+    });
+  }, [createNote, startTransition]);
+
+  useEffect(() => {
+    const raw = window.localStorage.getItem(UI_SETTINGS_KEY);
+    if (!raw) {
+      setUiSettingsReady(true);
+      return;
+    }
+
+    try {
+      const parsed = JSON.parse(raw) as Partial<{
+        tool: "pen" | "eraser" | "pan";
+        color: string;
+        size: number;
+        showGrid: boolean;
+        showTextPanel: boolean;
+        textPreview: boolean;
+      }>;
+
+      if (parsed.tool) {
+        setTool(parsed.tool);
+      }
+      if (typeof parsed.color === "string") {
+        setColor(parsed.color);
+      }
+      if (typeof parsed.size === "number") {
+        setSize(Math.min(24, Math.max(1, parsed.size)));
+      }
+      if (typeof parsed.showGrid === "boolean") {
+        setShowGrid(parsed.showGrid);
+      }
+      if (typeof parsed.showTextPanel === "boolean") {
+        setShowTextPanel(parsed.showTextPanel);
+      }
+      if (typeof parsed.textPreview === "boolean") {
+        setTextPreview(parsed.textPreview);
+      }
+    } catch (error: unknown) {
+      console.error("Failed to load UI settings", error);
+    } finally {
+      setUiSettingsReady(true);
+    }
+  }, [setColor, setShowGrid, setShowTextPanel, setSize, setTextPreview, setTool]);
+
+  useEffect(() => {
+    if (!uiSettingsReady) {
+      return;
+    }
+    window.localStorage.setItem(
+      UI_SETTINGS_KEY,
+      JSON.stringify({
+        tool,
+        color,
+        size,
+        showGrid,
+        showTextPanel,
+        textPreview,
+      }),
+    );
+  }, [color, showGrid, showTextPanel, size, textPreview, tool, uiSettingsReady]);
 
   useEffect(() => {
     loadNotesFromDb()
@@ -65,7 +135,6 @@ export default function App(): JSX.Element {
       window.clearTimeout(saveTimerRef.current);
     }
 
-    // Debounced autosave for text and ink updates.
     saveTimerRef.current = window.setTimeout(() => {
       saveNotesToDb(notes).catch((error: unknown) => {
         console.error("Failed to save notes", error);
@@ -88,7 +157,7 @@ export default function App(): JSX.Element {
 
       if (e.key.toLowerCase() === "n") {
         e.preventDefault();
-        createNote();
+        handleCreateNote();
         return;
       }
 
@@ -106,7 +175,7 @@ export default function App(): JSX.Element {
     return () => {
       window.removeEventListener("keydown", onKeyDown);
     };
-  }, [createNote, redoInk, undoInk]);
+  }, [handleCreateNote, redoInk, undoInk]);
 
   useEffect(() => {
     if (!selectedNoteId && notes.length > 0) {
@@ -115,41 +184,52 @@ export default function App(): JSX.Element {
   }, [notes, selectedNoteId, selectNote]);
 
   return (
-    <div className="app-shell">
-      <Sidebar
-        notes={notes}
-        selectedNoteId={selectedNote?.id ?? null}
-        searchQuery={searchQuery}
-        onSearch={setSearchQuery}
-        onSelect={selectNote}
-        onCreate={createNote}
-        onRename={renameNote}
-        onDelete={deleteNote}
-      />
-      <NoteEditor
-        note={selectedNote}
-        activeTab={activeTab}
-        textPreview={textPreview}
-        tool={tool}
-        color={color}
-        size={size}
-        onTabChange={setActiveTab}
-        onTitleChange={updateNoteTitle}
-        onTextChange={updateNoteText}
-        onTogglePreview={() => setTextPreview(!textPreview)}
-        onToolChange={setTool}
-        onColorChange={setColor}
-        onSizeChange={setSize}
-        onAppendStroke={appendStroke}
-        onEraseAt={eraseAt}
-        onPanViewport={panViewport}
-        onZoomViewportAt={zoomViewportAt}
-        onResetViewport={resetViewport}
-        onUndo={undoInk}
-        onRedo={redoInk}
-        onClear={clearInk}
-        onImportBundle={importBundle}
-      />
+    <div className="h-full bg-gradient-to-b from-slate-100 via-slate-100 to-slate-200 p-3 md:p-4">
+      <div className="mx-auto grid h-full max-w-[1600px] grid-cols-1 gap-3 md:grid-cols-[300px_1fr]">
+        <Sidebar
+          notes={notes}
+          selectedNoteId={selectedNote?.id ?? null}
+          searchQuery={searchQuery}
+          onSearch={setSearchQuery}
+          onSelect={selectNote}
+          onCreate={handleCreateNote}
+          onRename={renameNote}
+          onDelete={deleteNote}
+        />
+
+        <div className="relative h-full min-h-0">
+          <NoteEditor
+            note={selectedNote}
+            textPreview={textPreview}
+            tool={tool}
+            color={color}
+            size={size}
+            showGrid={showGrid}
+            showTextPanel={showTextPanel}
+            onTextChange={updateNoteText}
+            onTogglePreview={() => setTextPreview(!textPreview)}
+            onToolChange={setTool}
+            onColorChange={setColor}
+            onSizeChange={setSize}
+            onShowGridChange={setShowGrid}
+            onShowTextPanelChange={setShowTextPanel}
+            onAppendStroke={appendStroke}
+            onEraseAt={eraseAt}
+            onPanViewport={panViewport}
+            onZoomViewportAt={zoomViewportAt}
+            onResetViewport={resetViewport}
+            onUndo={undoInk}
+            onRedo={redoInk}
+            onClear={clearInk}
+            onImportBundle={importBundle}
+          />
+          {isPending ? (
+            <div className="pointer-events-none absolute right-3 top-3 rounded-md bg-slate-900/85 px-2 py-1 text-xs font-medium text-white">
+              Updating
+            </div>
+          ) : null}
+        </div>
+      </div>
     </div>
   );
 }

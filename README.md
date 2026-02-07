@@ -1,6 +1,6 @@
 # Derive AI Notebook
 
-Pen-first note taking app built with React 18 + TypeScript + Vite.
+Pen-first note taking app built with React 18 + TypeScript + Vite + Tailwind CSS.
 
 ## Features
 
@@ -10,6 +10,9 @@ Pen-first note taking app built with React 18 + TypeScript + Vite.
 - Pointer Events ink engine for stylus, touch, and mouse
 - Pressure-sensitive smoothing via `perfect-freehand`
 - Pan tool, eraser (real stroke deletion), undo/redo, clear ink
+- Toggleable grid overlay (aligned to pan/zoom world space)
+- Modernized minimal UI with Tailwind CSS
+- React 18 responsiveness patterns (`useTransition`, `useDeferredValue`, `memo`)
 - Offline autosave in IndexedDB via `Dexie`
 - Export ink as PNG
 - Export/import full note bundle JSON (`title + markdown + vector strokes + PNG preview`)
@@ -67,7 +70,7 @@ Each note stores:
 - `title`, `text`
 - `strokes` (active ink)
 - `undoneStrokes` (redo stack)
-- `viewport` (`offsetX`, `offsetY`) for pan
+- `viewport` (`offsetX`, `offsetY`, `scale`) for pan + zoom
 - `createdAt`, `updatedAt`
 
 Undo/redo is implemented with `strokes` + `undoneStrokes` stacks.

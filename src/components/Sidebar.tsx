@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { memo, useDeferredValue, useId, useMemo, useState, useTransition } from "react";
 import type { Note } from "../types";
 
 interface SidebarProps {
@@ -12,7 +12,7 @@ interface SidebarProps {
   onDelete: (id: string) => void;
 }
 
-export function Sidebar({
+function SidebarImpl({
   notes,
   selectedNoteId,
   searchQuery,
@@ -23,40 +23,56 @@ export function Sidebar({
   onDelete,
 }: SidebarProps): JSX.Element {
   const [editingId, setEditingId] = useState<string | null>(null);
+  const [isPending, startTransition] = useTransition();
+  const deferredQuery = useDeferredValue(searchQuery);
+  const searchId = useId();
 
   const filtered = useMemo(() => {
-    const q = searchQuery.toLowerCase().trim();
+    const q = deferredQuery.toLowerCase().trim();
     if (!q) {
       return notes;
     }
-    return notes.filter((n) => n.title.toLowerCase().includes(q));
-  }, [notes, searchQuery]);
+    return notes.filter((note) => note.title.toLowerCase().includes(q));
+  }, [deferredQuery, notes]);
 
   return (
-    <aside className="sidebar">
-      <div className="sidebar-top">
-        <button className="primary-btn" onClick={onCreate} type="button">
+    <aside className="flex h-full min-h-0 flex-col rounded-2xl border border-slate-200 bg-panel shadow-soft">
+      <div className="space-y-2 border-b border-slate-100 p-3">
+        <button className="btn btn-active w-full" onClick={onCreate} type="button">
           New Note
         </button>
+        <label htmlFor={searchId} className="sr-only">
+          Search notes
+        </label>
         <input
+          id={searchId}
           value={searchQuery}
-          onChange={(e) => onSearch(e.target.value)}
+          onChange={(e) => {
+            const next = e.target.value;
+            startTransition(() => onSearch(next));
+          }}
           placeholder="Search notes"
-          className="search-input"
+          className="input"
         />
       </div>
-      <div className="note-list">
+
+      <div className="min-h-0 flex-1 space-y-1 overflow-auto p-2">
         {filtered.map((note) => {
           const isSelected = note.id === selectedNoteId;
           const isEditing = editingId === note.id;
 
           return (
-            <div key={note.id} className={`note-list-item ${isSelected ? "selected" : ""}`}>
+            <div
+              key={note.id}
+              className={`grid grid-cols-[1fr_auto] items-center gap-2 rounded-lg p-1 ${
+                isSelected ? "bg-slate-100" : "hover:bg-slate-50"
+              }`}
+            >
               {isEditing ? (
                 <input
                   autoFocus
                   defaultValue={note.title}
-                  className="note-title-input"
+                  className="input py-1.5"
                   onBlur={(e) => {
                     onRename(note.id, e.target.value);
                     setEditingId(null);
@@ -71,8 +87,8 @@ export function Sidebar({
               ) : (
                 <button
                   type="button"
-                  className="note-title-btn"
-                  onClick={() => onSelect(note.id)}
+                  className="truncate rounded-md px-2 py-1.5 text-left text-sm text-slate-800"
+                  onClick={() => startTransition(() => onSelect(note.id))}
                   onDoubleClick={() => setEditingId(note.id)}
                 >
                   {note.title}
@@ -81,7 +97,7 @@ export function Sidebar({
 
               <button
                 type="button"
-                className="ghost-btn"
+                className="rounded-md px-2 py-1 text-xs font-medium text-slate-500 transition hover:bg-slate-200 hover:text-slate-700"
                 onClick={() => {
                   if (window.confirm("Delete this note?")) {
                     onDelete(note.id);
@@ -95,6 +111,12 @@ export function Sidebar({
           );
         })}
       </div>
+
+      <div className="border-t border-slate-100 px-3 py-2 text-xs text-slate-500">
+        {isPending ? "Updating..." : `${filtered.length} notes`}
+      </div>
     </aside>
   );
 }
+
+export const Sidebar = memo(SidebarImpl);

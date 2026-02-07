@@ -27,6 +27,8 @@ interface NoteState {
   tool: InkTool;
   color: string;
   size: number;
+  showGrid: boolean;
+  showTextPanel: boolean;
   hydrated: boolean;
   setHydrated: (value: boolean) => void;
   setNotes: (notes: Note[]) => void;
@@ -42,6 +44,8 @@ interface NoteState {
   setTool: (tool: InkTool) => void;
   setColor: (color: string) => void;
   setSize: (size: number) => void;
+  setShowGrid: (show: boolean) => void;
+  setShowTextPanel: (show: boolean) => void;
   appendStroke: (noteId: string, stroke: InkStroke) => void;
   eraseAt: (noteId: string, x: number, y: number, radius: number) => void;
   undoInk: () => void;
@@ -65,6 +69,8 @@ export const useNoteStore = create<NoteState>((set, get) => ({
   tool: "pen",
   color: "#111827",
   size: 6,
+  showGrid: false,
+  showTextPanel: false,
   hydrated: false,
   setHydrated: (value) => set({ hydrated: value }),
   setNotes: (notes) => {
@@ -138,6 +144,8 @@ export const useNoteStore = create<NoteState>((set, get) => ({
   setTool: (tool) => set({ tool }),
   setColor: (color) => set({ color }),
   setSize: (size) => set({ size }),
+  setShowGrid: (show) => set({ showGrid: show }),
+  setShowTextPanel: (show) => set({ showTextPanel: show }),
   appendStroke: (noteId, stroke) => {
     set((state) => ({
       notes: state.notes.map((note) =>

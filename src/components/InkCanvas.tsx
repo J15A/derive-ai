@@ -7,6 +7,7 @@ interface InkCanvasProps {
   tool: InkTool;
   color: string;
   size: number;
+  showGrid: boolean;
   onAppendStroke: (noteId: string, stroke: InkStroke) => void;
   onEraseAt: (noteId: string, x: number, y: number, radius: number) => void;
   onPanViewport: (noteId: string, dx: number, dy: number) => void;
@@ -21,6 +22,7 @@ export function InkCanvas({
   tool,
   color,
   size,
+  showGrid,
   onAppendStroke,
   onEraseAt,
   onPanViewport,
@@ -55,6 +57,32 @@ export function InkCanvas({
     ctx.fillStyle = BACKGROUND;
     ctx.fillRect(0, 0, rect.width, rect.height);
 
+    if (showGrid) {
+      const gridStep = 40;
+      const startX = Math.floor((-note.viewport.offsetX / note.viewport.scale) / gridStep) * gridStep;
+      const endX = Math.ceil(((rect.width - note.viewport.offsetX) / note.viewport.scale) / gridStep) * gridStep;
+      const startY = Math.floor((-note.viewport.offsetY / note.viewport.scale) / gridStep) * gridStep;
+      const endY = Math.ceil(((rect.height - note.viewport.offsetY) / note.viewport.scale) / gridStep) * gridStep;
+
+      ctx.save();
+      ctx.translate(note.viewport.offsetX, note.viewport.offsetY);
+      ctx.scale(note.viewport.scale, note.viewport.scale);
+      ctx.beginPath();
+      ctx.lineWidth = 1 / note.viewport.scale;
+      ctx.strokeStyle = "#dbe4ee";
+
+      for (let x = startX; x <= endX; x += gridStep) {
+        ctx.moveTo(x, startY);
+        ctx.lineTo(x, endY);
+      }
+      for (let y = startY; y <= endY; y += gridStep) {
+        ctx.moveTo(startX, y);
+        ctx.lineTo(endX, y);
+      }
+      ctx.stroke();
+      ctx.restore();
+    }
+
     ctx.save();
     ctx.translate(note.viewport.offsetX, note.viewport.offsetY);
     ctx.scale(note.viewport.scale, note.viewport.scale);
@@ -75,7 +103,7 @@ export function InkCanvas({
     }
 
     ctx.restore();
-  }, [color, note.strokes, note.viewport.offsetX, note.viewport.offsetY, note.viewport.scale, size, tool]);
+  }, [color, note.strokes, note.viewport.offsetX, note.viewport.offsetY, note.viewport.scale, showGrid, size, tool]);
 
   const scheduleDraw = useCallback(() => {
     if (rafRef.current !== null) {
@@ -286,10 +314,10 @@ export function InkCanvas({
   };
 
   return (
-    <div className="ink-canvas-wrap" ref={containerRef}>
+    <div className="relative h-full min-h-0 w-full overflow-hidden rounded-b-2xl bg-slate-50" ref={containerRef}>
       <canvas
         ref={canvasRef}
-        className="ink-canvas"
+        className="block h-full w-full touch-none"
         style={{ cursor: tool === "pan" ? "grab" : tool === "eraser" ? "cell" : "crosshair" }}
         onPointerDown={handlePointerDown}
         onPointerMove={handlePointerMove}
