@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { X, ChevronDown, ChevronUp } from "lucide-react";
+import { X } from "lucide-react";
 
 declare global {
   interface Window {
@@ -57,13 +57,12 @@ function needs3D(latex: string): boolean {
 export function GraphPanel({
   equations,
   onRemoveEquation,
-  onClose,
 }: GraphPanelProps): JSX.Element {
   const containerRef = useRef<HTMLDivElement>(null);
   const calcRef = useRef<DesmosCalculator | null>(null);
   const [scriptLoaded, setScriptLoaded] = useState(!!window.Desmos);
-  const [collapsed, setCollapsed] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
+  const [invalidEquations, setInvalidEquations] = useState<Set<string>>(new Set());
   
   // Check if we need 3D mode
   const is3DMode = equations.some(eq => needs3D(eq.latex));
@@ -110,7 +109,7 @@ export function GraphPanel({
 
   // Create calculator instance
   useEffect(() => {
-    if (!scriptLoaded || !containerRef.current || !window.Desmos || collapsed) {
+    if (!scriptLoaded || !containerRef.current || !window.Desmos) {
       return;
     }
 
@@ -155,18 +154,25 @@ export function GraphPanel({
 
     calcRef.current = calc;
 
-    // Add existing equations
+    // Add existing equations with error handling
+    const newInvalidEquations = new Set<string>();
     for (const eq of equations) {
-      calc.setExpression({ id: eq.id, latex: eq.latex, color: eq.color });
+      try {
+        calc.setExpression({ id: eq.id, latex: eq.latex, color: eq.color });
+      } catch (error) {
+        console.error(`Failed to add equation: ${eq.latex}`, error);
+        newInvalidEquations.add(eq.id);
+      }
     }
+    setInvalidEquations(newInvalidEquations);
 
     return () => {
       calc.destroy();
       calcRef.current = null;
     };
-    // We re-create when collapsed changes or when switching between 2D/3D mode
+    // We re-create when switching between 2D/3D mode
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [scriptLoaded, collapsed, is3DMode]);
+  }, [scriptLoaded, is3DMode]);
 
   // Sync equations to calculator
   const prevEquationsRef = useRef<GraphEquation[]>([]);
@@ -179,14 +185,25 @@ export function GraphPanel({
     // Remove equations that are no longer in the list
     for (const prevEq of prevEquationsRef.current) {
       if (!currentIds.has(prevEq.id)) {
-        calc.removeExpression({ id: prevEq.id });
+        try {
+          calc.removeExpression({ id: prevEq.id });
+        } catch (error) {
+          console.error(`Failed to remove equation: ${prevEq.id}`, error);
+        }
       }
     }
 
-    // Add or update equations
+    // Add or update equations with error handling
+    const newInvalidEquations = new Set<string>();
     for (const eq of equations) {
-      calc.setExpression({ id: eq.id, latex: eq.latex, color: eq.color });
+      try {
+        calc.setExpression({ id: eq.id, latex: eq.latex, color: eq.color });
+      } catch (error) {
+        console.error(`Failed to add/update equation: ${eq.latex}`, error);
+        newInvalidEquations.add(eq.id);
+      }
     }
+    setInvalidEquations(newInvalidEquations);
 
     prevEquationsRef.current = equations;
   }, [equations]);
@@ -198,30 +215,7 @@ export function GraphPanel({
 
   return (
     <section className="flex flex-col overflow-hidden rounded-xl border border-slate-200 bg-white shadow-2xl">
-      {/* Header */}
-      <div className="flex shrink-0 items-center justify-end border-b border-slate-100 bg-slate-50 px-2 py-1.5">
-        <div className="flex items-center gap-1">
-          <button
-            type="button"
-            className="rounded-md p-1 text-slate-500 transition-colors hover:bg-slate-200 hover:text-slate-700"
-            onClick={() => setCollapsed(!collapsed)}
-            title={collapsed ? "Expand" : "Collapse"}
-          >
-            {collapsed ? <ChevronDown size={16} /> : <ChevronUp size={16} />}
-          </button>
-          <button
-            type="button"
-            className="rounded-md p-1 text-slate-500 transition-colors hover:bg-slate-200 hover:text-slate-700"
-            onClick={onClose}
-            title="Close graph"
-          >
-            <X size={16} />
-          </button>
-        </div>
-      </div>
-
-      {!collapsed && (
-        <>
+      <>
           {/* Desmos graph container */}
           {loadError ? (
             <div className="flex h-[300px] w-full items-center justify-center bg-red-50 px-4 text-center">
@@ -243,28 +237,41 @@ export function GraphPanel({
           {/* Equations list */}
           {equations.length > 0 && (
             <div className="max-h-[140px] overflow-y-auto border-t border-slate-100">
-              {equations.map((eq) => (
-                <div
-                  key={eq.id}
-                  className="flex items-center gap-2 border-b border-slate-50 px-3 py-1.5 last:border-b-0"
-                >
-                  <span
-                    className="h-3 w-3 shrink-0 rounded-full"
-                    style={{ backgroundColor: eq.color }}
-                  />
-                  <span className="min-w-0 flex-1 truncate font-mono text-xs text-slate-700">
-                    {eq.latex}
-                  </span>
-                  <button
-                    type="button"
-                    className="shrink-0 rounded p-0.5 text-slate-400 transition-colors hover:bg-red-50 hover:text-red-500"
-                    onClick={() => onRemoveEquation(eq.id)}
-                    title="Remove equation"
+              {equations.map((eq) => {
+                const isInvalid = invalidEquations.has(eq.id);
+                return (
+                  <div
+                    key={eq.id}
+                    className={`flex items-center gap-2 border-b border-slate-50 px-3 py-1.5 last:border-b-0 ${
+                      isInvalid ? 'bg-red-50' : ''
+                    }`}
                   >
-                    <X size={14} />
-                  </button>
-                </div>
-              ))}
+                    <span
+                      className="h-3 w-3 shrink-0 rounded-full"
+                      style={{ backgroundColor: isInvalid ? '#ef4444' : eq.color }}
+                      title={isInvalid ? 'Invalid equation' : ''}
+                    />
+                    <span className={`min-w-0 flex-1 truncate font-mono text-xs ${
+                      isInvalid ? 'text-red-600' : 'text-slate-700'
+                    }`}>
+                      {eq.latex}
+                      {isInvalid && (
+                        <span className="ml-2 text-[10px] font-normal text-red-500">
+                          (invalid equation)
+                        </span>
+                      )}
+                    </span>
+                    <button
+                      type="button"
+                      className="shrink-0 rounded p-0.5 text-slate-400 transition-colors hover:bg-red-50 hover:text-red-500"
+                      onClick={() => onRemoveEquation(eq.id)}
+                      title="Remove equation"
+                    >
+                      <X size={14} />
+                    </button>
+                  </div>
+                );
+              })}
             </div>
           )}
 
@@ -274,7 +281,6 @@ export function GraphPanel({
             </div>
           )}
         </>
-      )}
     </section>
   );
 }
