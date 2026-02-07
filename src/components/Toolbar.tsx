@@ -6,14 +6,16 @@ import { useState } from "react";
 interface ToolbarProps {
   tool: InkTool;
   color: string;
-  size: number;
+  penSize: number;
+  highlighterSize: number;
   showGrid: boolean;
   showTextPanel: boolean;
   isFullscreen: boolean;
   zoomPercent: number;
   onToolChange: (tool: InkTool) => void;
   onColorChange: (value: string) => void;
-  onSizeChange: (value: number) => void;
+  onPenSizeChange: (value: number) => void;
+  onHighlighterSizeChange: (value: number) => void;
   onShowGridChange: (value: boolean) => void;
   onShowTextPanelChange: (value: boolean) => void;
   onToggleFullscreen: () => void;
@@ -48,14 +50,16 @@ const PEN_COLORS = [
 
 export function Toolbar({
   tool,
-  size,
+  penSize,
+  highlighterSize,
   showGrid,
   showTextPanel,
   isFullscreen,
   zoomPercent,
   onToolChange,
   onColorChange,
-  onSizeChange,
+  onPenSizeChange,
+  onHighlighterSizeChange,
   onShowGridChange,
   onShowTextPanelChange,
   onToggleFullscreen,
@@ -170,17 +174,19 @@ export function Toolbar({
                   />
                 ))}
               </div>
-              <div className="flex items-center gap-2 rounded-lg border border-slate-200 bg-slate-50 p-2">
-                <span className="w-14 text-xs font-semibold text-slate-600">Size</span>
+              <div className="flex items-center gap-3 rounded-lg bg-slate-50 px-3 py-2">
                 <input
                   type="range"
                   min={1}
                   max={24}
-                  value={size}
-                  onChange={(e) => onSizeChange(Number(e.target.value))}
-                  className="w-full"
+                  value={penSize}
+                  onChange={(e) => onPenSizeChange(Number(e.target.value))}
+                  className="flex-1"
+                  style={{ minWidth: "120px" }}
                 />
-                <span className="w-7 text-center text-xs font-semibold text-slate-700">{size}</span>
+                <div className="flex h-7 w-7 items-center justify-center rounded-md bg-white text-xs font-semibold text-slate-700 shadow-sm">
+                  {penSize}
+                </div>
               </div>
             </div>
           )}
@@ -214,20 +220,36 @@ export function Toolbar({
           
           {/* Color dropdown menu */}
           {showHighlighterMenu && (
-            <div className="absolute left-0 top-10 z-50 flex gap-1 rounded-lg border border-slate-200 bg-white p-2 shadow-lg">
-              {HIGHLIGHTER_COLORS.map((c) => (
-                <button
-                  key={c.value}
-                  className="h-8 w-8 rounded-md border-2 transition-transform hover:scale-110"
-                  style={{ 
-                    backgroundColor: c.value,
-                    borderColor: highlighterColor === c.value ? "#334155" : "transparent"
-                  }}
-                  onClick={() => handleHighlighterColorSelect(c.value)}
-                  title={c.name}
-                  type="button"
+            <div className="absolute left-0 top-10 z-50 flex flex-col gap-2 rounded-lg border border-slate-200 bg-white p-2 shadow-lg">
+              <div className="flex gap-1">
+                {HIGHLIGHTER_COLORS.map((c) => (
+                  <button
+                    key={c.value}
+                    className="h-8 w-8 rounded-md border-2 transition-transform hover:scale-110"
+                    style={{ 
+                      backgroundColor: c.value,
+                      borderColor: highlighterColor === c.value ? "#334155" : "transparent"
+                    }}
+                    onClick={() => handleHighlighterColorSelect(c.value)}
+                    title={c.name}
+                    type="button"
+                  />
+                ))}
+              </div>
+              <div className="flex items-center gap-3 rounded-lg bg-slate-50 px-3 py-2">
+                <input
+                  type="range"
+                  min={8}
+                  max={32}
+                  value={highlighterSize}
+                  onChange={(e) => onHighlighterSizeChange(Number(e.target.value))}
+                  className="flex-1"
+                  style={{ minWidth: "120px" }}
                 />
-              ))}
+                <div className="flex h-7 w-7 items-center justify-center rounded-md bg-white text-xs font-semibold text-slate-700 shadow-sm">
+                  {highlighterSize}
+                </div>
+              </div>
             </div>
           )}
         </div>

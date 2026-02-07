@@ -25,7 +25,8 @@ interface NoteState {
   activeTab: "ink" | "text";
   tool: InkTool;
   color: string;
-  size: number;
+  penSize: number;
+  highlighterSize: number;
   showGrid: boolean;
   showTextPanel: boolean;
   hydrated: boolean;
@@ -41,7 +42,8 @@ interface NoteState {
   updateNoteText: (text: string) => void;
   setTool: (tool: InkTool) => void;
   setColor: (color: string) => void;
-  setSize: (size: number) => void;
+  setPenSize: (size: number) => void;
+  setHighlighterSize: (size: number) => void;
   setShowGrid: (show: boolean) => void;
   setShowTextPanel: (show: boolean) => void;
   appendStroke: (noteId: string, stroke: InkStroke) => void;
@@ -67,7 +69,8 @@ export const useNoteStore = create<NoteState>((set, get) => ({
   activeTab: "ink",
   tool: "pen",
   color: "#111827",
-  size: 6,
+  penSize: 6,
+  highlighterSize: 16,
   showGrid: false,
   showTextPanel: false,
   hydrated: false,
@@ -141,7 +144,8 @@ export const useNoteStore = create<NoteState>((set, get) => ({
   },
   setTool: (tool) => set({ tool }),
   setColor: (color) => set({ color }),
-  setSize: (size) => set({ size }),
+  setPenSize: (size) => set({ penSize: size }),
+  setHighlighterSize: (size) => set({ highlighterSize: size }),
   setShowGrid: (show) => set({ showGrid: show }),
   setShowTextPanel: (show) => set({ showTextPanel: show }),
   appendStroke: (noteId, stroke) => {

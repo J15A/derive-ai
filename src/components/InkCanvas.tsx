@@ -6,7 +6,8 @@ interface InkCanvasProps {
   note: Note;
   tool: InkTool;
   color: string;
-  size: number;
+  penSize: number;
+  highlighterSize: number;
   showGrid: boolean;
   onAppendStroke: (noteId: string, stroke: InkStroke) => void;
   onEraseAt: (noteId: string, x: number, y: number, radius: number) => void;
@@ -23,7 +24,8 @@ export function InkCanvas({
   note,
   tool,
   color,
-  size,
+  penSize,
+  highlighterSize,
   showGrid,
   onAppendStroke,
   onEraseAt,
@@ -152,7 +154,8 @@ export function InkCanvas({
 
     if (currentPointsRef.current.length === 1 && (tool === "pen" || tool === "highlighter")) {
       const point = currentPointsRef.current[0];
-      const radius = Math.max(0.5, (size * Math.max(0.1, point.pressure)) / 2);
+      const currentSize = tool === "highlighter" ? highlighterSize : penSize;
+      const radius = Math.max(0.5, (currentSize * Math.max(0.1, point.pressure)) / 2);
       ctx.save();
       ctx.globalAlpha = tool === "highlighter" ? 0.4 : 1;
       ctx.beginPath();
@@ -161,11 +164,12 @@ export function InkCanvas({
       ctx.fill();
       ctx.restore();
     } else if (currentPointsRef.current.length > 1 && (tool === "pen" || tool === "highlighter")) {
+      const currentSize = tool === "highlighter" ? highlighterSize : penSize;
       const tempStroke: InkStroke = {
         id: "temp",
         tool: tool === "highlighter" ? "highlighter" : "pen",
         color,
-        baseSize: size,
+        baseSize: currentSize,
         points: currentPointsRef.current,
       };
       const polygon = strokePolygon(tempStroke);
@@ -176,7 +180,7 @@ export function InkCanvas({
       } else {
         const point = tempStroke.points[tempStroke.points.length - 1];
         if (point) {
-          const radius = Math.max(0.5, (size * Math.max(0.1, point.pressure)) / 2);
+          const radius = Math.max(0.5, (currentSize * Math.max(0.1, point.pressure)) / 2);
           ctx.beginPath();
           ctx.arc(point.x, point.y, radius, 0, Math.PI * 2);
           ctx.fillStyle = color;
@@ -200,7 +204,7 @@ export function InkCanvas({
     }
 
     ctx.restore();
-  }, [color, note.strokes, note.viewport.offsetX, note.viewport.offsetY, note.viewport.scale, showGrid, size, tool, selectedStrokes, selectionBox]);
+  }, [color, note.strokes, note.viewport.offsetX, note.viewport.offsetY, note.viewport.scale, showGrid, penSize, highlighterSize, tool, selectedStrokes, selectionBox]);
 
   const scheduleDraw = useCallback(() => {
     if (rafRef.current !== null) {
@@ -249,7 +253,7 @@ export function InkCanvas({
 
   useEffect(() => {
     scheduleDraw();
-  }, [note, tool, size, color, scheduleDraw]);
+  }, [note, tool, penSize, highlighterSize, color, scheduleDraw]);
 
   useEffect(() => {
     // Clear selection when switching away from selector tool
@@ -351,20 +355,24 @@ export function InkCanvas({
       return;
     }
 
+    const currentSize = tool === "highlighter" ? highlighterSize : penSize;
     const stroke: InkStroke = {
       id: uid(),
       tool: (tool === "pen" || tool === "highlighter") ? tool : "pen",
       color,
-      baseSize: size,
+      baseSize: currentSize,
       points: [...currentPointsRef.current],
     };
 
     onAppendStroke(note.id, stroke);
     currentPointsRef.current = [];
     scheduleDraw();
-  }, [color, note.id, onAppendStroke, scheduleDraw, size]);
+  }, [color, note.id, onAppendStroke, scheduleDraw, tool, penSize, highlighterSize]);
 
-  const eraserRadius = useMemo(() => Math.max(8, size * 1.5) / note.viewport.scale, [note.viewport.scale, size]);
+  const eraserRadius = useMemo(() => {
+    const currentSize = tool === "highlighter" ? highlighterSize : penSize;
+    return Math.max(8, currentSize * 1.5) / note.viewport.scale;
+  }, [note.viewport.scale, penSize, highlighterSize, tool]);
 
   const handlePointerDown = (e: React.PointerEvent<HTMLCanvasElement>) => {
     const canvas = canvasRef.current;

@@ -14,7 +14,8 @@ export default function App(): JSX.Element {
     searchQuery,
     tool,
     color,
-    size,
+    penSize,
+    highlighterSize,
     showGrid,
     showTextPanel,
     hydrated,
@@ -28,7 +29,8 @@ export default function App(): JSX.Element {
     updateNoteText,
     setTool,
     setColor,
-    setSize,
+    setPenSize,
+    setHighlighterSize,
     setShowGrid,
     setShowTextPanel,
     appendStroke,
@@ -72,7 +74,8 @@ export default function App(): JSX.Element {
       const parsed = JSON.parse(raw) as Partial<{
         tool: "pen" | "eraser" | "pan" | "selector" | "highlighter";
         color: string;
-        size: number;
+        penSize: number;
+        highlighterSize: number;
         showGrid: boolean;
         showTextPanel: boolean;
       }>;
@@ -83,8 +86,11 @@ export default function App(): JSX.Element {
       if (typeof parsed.color === "string") {
         setColor(parsed.color);
       }
-      if (typeof parsed.size === "number") {
-        setSize(Math.min(24, Math.max(1, parsed.size)));
+      if (typeof parsed.penSize === "number") {
+        setPenSize(Math.min(24, Math.max(1, parsed.penSize)));
+      }
+      if (typeof parsed.highlighterSize === "number") {
+        setHighlighterSize(Math.min(32, Math.max(1, parsed.highlighterSize)));
       }
       if (typeof parsed.showGrid === "boolean") {
         setShowGrid(parsed.showGrid);
@@ -97,7 +103,7 @@ export default function App(): JSX.Element {
     } finally {
       setUiSettingsReady(true);
     }
-  }, [setColor, setShowGrid, setShowTextPanel, setSize, setTool]);
+  }, [setColor, setShowGrid, setShowTextPanel, setPenSize, setHighlighterSize, setTool]);
 
   useEffect(() => {
     if (!uiSettingsReady) {
@@ -108,12 +114,13 @@ export default function App(): JSX.Element {
       JSON.stringify({
         tool,
         color,
-        size,
+        penSize,
+        highlighterSize,
         showGrid,
         showTextPanel,
       }),
     );
-  }, [color, showGrid, showTextPanel, size, tool, uiSettingsReady]);
+  }, [color, showGrid, showTextPanel, penSize, highlighterSize, tool, uiSettingsReady]);
 
   useEffect(() => {
     loadNotesFromDb()
@@ -218,13 +225,15 @@ export default function App(): JSX.Element {
             note={selectedNote}
             tool={tool}
             color={color}
-            size={size}
+            penSize={penSize}
+            highlighterSize={highlighterSize}
             showGrid={showGrid}
             showTextPanel={showTextPanel}
             onTextChange={updateNoteText}
             onToolChange={setTool}
             onColorChange={setColor}
-            onSizeChange={setSize}
+            onPenSizeChange={setPenSize}
+            onHighlighterSizeChange={setHighlighterSize}
             onShowGridChange={setShowGrid}
             onShowTextPanelChange={setShowTextPanel}
             onAppendStroke={appendStroke}

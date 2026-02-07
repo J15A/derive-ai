@@ -35,8 +35,27 @@ export function drawStrokePolygon(
   ctx.beginPath();
   ctx.moveTo(polygon[0][0] + offsetX, polygon[0][1] + offsetY);
 
-  for (let i = 1; i < polygon.length; i += 1) {
-    ctx.lineTo(polygon[i][0] + offsetX, polygon[i][1] + offsetY);
+  // Use quadratic curves for smoother rendering instead of straight lines
+  for (let i = 1; i < polygon.length - 1; i += 1) {
+    const currentPoint = polygon[i];
+    const nextPoint = polygon[i + 1];
+    
+    // Calculate midpoint for smooth curve
+    const midX = (currentPoint[0] + nextPoint[0]) / 2 + offsetX;
+    const midY = (currentPoint[1] + nextPoint[1]) / 2 + offsetY;
+    
+    ctx.quadraticCurveTo(
+      currentPoint[0] + offsetX,
+      currentPoint[1] + offsetY,
+      midX,
+      midY
+    );
+  }
+  
+  // Handle last point
+  if (polygon.length > 1) {
+    const lastPoint = polygon[polygon.length - 1];
+    ctx.lineTo(lastPoint[0] + offsetX, lastPoint[1] + offsetY);
   }
 
   ctx.closePath();

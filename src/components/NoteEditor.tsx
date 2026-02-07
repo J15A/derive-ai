@@ -10,13 +10,15 @@ interface NoteEditorProps {
   note: Note | null;
   tool: InkTool;
   color: string;
-  size: number;
+  penSize: number;
+  highlighterSize: number;
   showGrid: boolean;
   showTextPanel: boolean;
   onTextChange: (value: string) => void;
   onToolChange: (tool: InkTool) => void;
   onColorChange: (value: string) => void;
-  onSizeChange: (value: number) => void;
+  onPenSizeChange: (value: number) => void;
+  onHighlighterSizeChange: (value: number) => void;
   onShowGridChange: (value: boolean) => void;
   onShowTextPanelChange: (value: boolean) => void;
   onAppendStroke: (noteId: string, stroke: Note["strokes"][number]) => void;
@@ -46,13 +48,15 @@ export function NoteEditor({
   note,
   tool,
   color,
-  size,
+  penSize,
+  highlighterSize,
   showGrid,
   showTextPanel,
   onTextChange,
   onToolChange,
   onColorChange,
-  onSizeChange,
+  onPenSizeChange,
+  onHighlighterSizeChange,
   onShowGridChange,
   onShowTextPanelChange,
   onAppendStroke,
@@ -132,14 +136,16 @@ export function NoteEditor({
       <Toolbar
         tool={tool}
         color={color}
-        size={size}
+        penSize={penSize}
+        highlighterSize={highlighterSize}
         showGrid={showGrid}
         showTextPanel={showTextPanel}
         isFullscreen={isFullscreen}
         zoomPercent={Math.round(safeNote.viewport.scale * 100)}
         onToolChange={onToolChange}
         onColorChange={onColorChange}
-        onSizeChange={onSizeChange}
+        onPenSizeChange={onPenSizeChange}
+        onHighlighterSizeChange={onHighlighterSizeChange}
         onShowGridChange={onShowGridChange}
         onShowTextPanelChange={onShowTextPanelChange}
         onToggleFullscreen={() => {
@@ -169,7 +175,8 @@ export function NoteEditor({
           note={safeNote}
           tool={tool}
           color={color}
-          size={size}
+          penSize={penSize}
+          highlighterSize={highlighterSize}
           showGrid={showGrid}
           onAppendStroke={onAppendStroke}
           onEraseAt={onEraseAt}
