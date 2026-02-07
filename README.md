@@ -1,6 +1,8 @@
 # Derive AI Notebook
 
-Pen-first note taking app built with React 18 + TypeScript + Vite + Tailwind CSS.
+**📚 Documentation**: See [DOCS.md](./DOCS.md) for complete documentation index.
+
+Pen-first note taking app built with React 18 + TypeScript + Vite + Tailwind CSS + MongoDB.
 
 ## Features
 
@@ -13,7 +15,8 @@ Pen-first note taking app built with React 18 + TypeScript + Vite + Tailwind CSS
 - Toggleable grid overlay (aligned to pan/zoom world space)
 - Modernized minimal UI with Tailwind CSS
 - React 18 responsiveness patterns (`useTransition`, `useDeferredValue`, `memo`)
-- Offline autosave in IndexedDB via `Dexie`
+- Cloud storage with MongoDB backend
+- Automatic sync across devices
 - Export ink as PNG
 - Export/import full note bundle JSON (`title + markdown + vector strokes + PNG preview`)
 - Keyboard shortcuts:
@@ -23,8 +26,62 @@ Pen-first note taking app built with React 18 + TypeScript + Vite + Tailwind CSS
 
 ## Setup
 
+**Quick Start**: See [QUICKSTART.md](./QUICKSTART.md) for step-by-step setup instructions.
+
+**Docker Setup**: See [DOCKER.md](./DOCKER.md) for Docker-based MongoDB setup.
+
+### Prerequisites
+
+- Node.js (v18 or higher)
+- MongoDB (local or cloud)
+
+### Backend Setup
+
+1. **Install and start MongoDB**:
+
+```bash
+# macOS (with Homebrew)
+brew services start mongodb-community
+
+# Or use Docker
+docker run -d -p 27017:27017 --name mongodb mongo:latest
+```
+
+2. **Install and run the server**:
+
+```bash
+cd server
+npm install
+cp .env.example .env
+npm run dev
+```
+
+The server will start on `http://localhost:3001`.
+
+See [server/README.md](./server/README.md) for detailed backend setup instructions.
+
+### Frontend Setup
+
+1. **Install dependencies**:
+
 ```bash
 npm install
+```
+
+2. **Configure API endpoint**:
+
+```bash
+cp .env.example .env
+```
+
+The `.env` file should contain:
+```
+VITE_API_URL=http://localhost:3001/api
+```
+
+3. **Run the development server**:
+
+```bash
 npm run dev
 ```
 
@@ -37,6 +94,7 @@ npm run preview
 
 ## Folder Structure
 
+### Frontend
 - `src/components`
   - `Sidebar.tsx`
   - `NoteEditor.tsx`
@@ -46,10 +104,17 @@ npm run preview
 - `src/store`
   - `noteStore.ts` (Zustand state + actions)
 - `src/db`
-  - `database.ts` (Dexie schema and queries)
+  - `database.ts` (API client for MongoDB backend)
 - `src/utils`
   - `ink.ts` (stroke geometry, smoothing pipeline, export helpers)
 - `src/types.ts`
+
+### Backend
+- `server/src`
+  - `index.ts` (Express server setup)
+  - `db.ts` (MongoDB connection)
+  - `routes/notes.ts` (REST API endpoints)
+  - `types.ts` (Shared TypeScript types)
 
 ## Ink Data Model
 
@@ -129,6 +194,8 @@ Edit `src/utils/ink.ts` in `strokePolygon()`:
 - `simulatePressure`: synthetic pressure toggle (currently `false`)
 
 ## Real-time Collaboration (Future)
+
+**Architecture**: See [ARCHITECTURE.md](./ARCHITECTURE.md) for detailed system architecture and data flow diagrams.
 
 Use Yjs:
 
