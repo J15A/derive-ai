@@ -1,5 +1,5 @@
 import { memo, useDeferredValue, useId, useMemo, useState, useTransition } from "react";
-import { ChevronLeft, ChevronRight } from "lucide-react";
+import { ChevronLeft } from "lucide-react";
 import type { Note } from "../types";
 
 interface SidebarProps {

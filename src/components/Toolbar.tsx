@@ -132,7 +132,7 @@ export function Toolbar({
       <div className="flex min-w-0 items-center gap-2">
         {/* Pen with color dropdown */}
         <div 
-          className="relative pb-2"
+          className="relative"
           onMouseEnter={() => setShowPenMenu(true)}
           onMouseLeave={() => setShowPenMenu(false)}
         >
@@ -192,7 +192,7 @@ export function Toolbar({
         
         {/* Highlighter with color dropdown */}
         <div 
-          className="relative pb-2"
+          className="relative"
           onMouseEnter={() => setShowHighlighterMenu(true)}
           onMouseLeave={() => setShowHighlighterMenu(false)}
         >
