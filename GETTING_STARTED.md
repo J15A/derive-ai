@@ -1,104 +1,66 @@
 # Getting Started
 
-## Quick Setup
-
-### 1. Install Dependencies
+## 1. Install Dependencies
 
 ```bash
-# Install frontend dependencies
-npm install
-
-# Install backend dependencies
-cd server
-npm install
-cd ..
+npm run install:all
 ```
 
-### 2. Configure Environment Variables
+## 2. Configure Environment Variables
 
-**Frontend** - Create `.env` in the project root:
+### Frontend
+
+Create `frontend/.env`:
+
 ```env
 VITE_API_URL=http://localhost:3001/api
 ```
 
-**Backend** - Copy the example and configure `server/.env`:
+### Backend
+
+Copy and edit backend env file:
+
 ```bash
-cp server/.env.example server/.env
+cp backend/.env.example backend/.env
 ```
 
-Edit `server/.env` with your MongoDB Atlas connection string:
+Set `backend/.env`:
+
 ```env
 PORT=3001
 MONGODB_URI=your-mongodb-atlas-connection-string
 NODE_ENV=development
 ```
 
-### 3. Start the Application
+## 3. Start the App
 
-**Option 1: Run both servers with one command**
+### One command (recommended)
+
 ```bash
-npm run dev:all
-```
-
-**Option 2: Run separately**
-```bash
-# Terminal 1 - Backend
-cd server
-npm run dev
-
-# Terminal 2 - Frontend
 npm run dev
 ```
 
-### 4. Open the App
+### Or run separately
 
-Open your browser to **http://localhost:5173**
+```bash
+# Terminal 1
+cd backend && npm run dev
 
-## What's Included
+# Terminal 2
+cd frontend && npm run dev
+```
 
-### Backend (Node.js + Express + MongoDB Atlas)
-- REST API for notes CRUD operations
-- MongoDB Atlas cloud database
-- Automatic data persistence
-- Health check endpoint
-- Environment-based configuration
+## 4. Open the App
 
-### Frontend (React + TypeScript + Vite)
-- Pen-first note editor with pressure sensitivity
-- Text editor with markdown support
-- Multi-note management
-- Highlighter and selector tools
-- Automatic cloud sync
-
-## API Endpoints
-
-- `GET /api/notes` - Get all notes
-- `POST /api/notes` - Create note
-- `PUT /api/notes/:id` - Update note
-- `DELETE /api/notes/:id` - Delete note
-- `POST /api/notes/bulk` - Bulk save/update
-- `GET /health` - Health check
+- Frontend: `http://localhost:5173`
+- Backend health: `http://localhost:3001/health`
 
 ## Troubleshooting
 
-**Backend won't start?**
-- Check that you've created `server/.env` from `server/.env.example`
-- Verify MongoDB Atlas connection string is valid
-- Confirm Node.js version is 18+
-- Check that port 3001 is not in use
-
-**Frontend can't connect?**
-- Verify backend is running on port 3001
-- Check `.env` has correct `VITE_API_URL`
-
-**MongoDB connection errors?**
-- Verify MongoDB Atlas cluster is active at [cloud.mongodb.com](https://cloud.mongodb.com)
-- Check your IP is whitelisted in MongoDB Atlas Network Access settings
-- Confirm database credentials are correct in `server/.env`
-- Ensure connection string format is correct
-
-## Need Help?
-
-See the full documentation:
-- [README.md](./README.md) - Complete project overview
-- [server/README.md](./server/README.md) - Backend documentation
+- Backend fails to start:
+  - verify `backend/.env` exists and `MONGODB_URI` is valid
+  - verify Node.js v18+
+  - ensure port `3001` is available
+- Frontend fails to call API:
+  - verify backend is running on `3001`
+  - verify `frontend/.env` has correct `VITE_API_URL`
