@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import type { Note, NoteBundle } from "../types";
+import type { Note, NoteBundle, InkTool } from "../types";
 import { buildNoteBundle } from "../store/noteStore";
 import { strokesToPngDataUrl } from "../utils/ink";
 import { InkCanvas } from "./InkCanvas";
@@ -8,19 +8,21 @@ import { Toolbar } from "./Toolbar";
 
 interface NoteEditorProps {
   note: Note | null;
-  tool: "pen" | "eraser" | "pan";
+  tool: InkTool;
   color: string;
   size: number;
   showGrid: boolean;
   showTextPanel: boolean;
   onTextChange: (value: string) => void;
-  onToolChange: (tool: "pen" | "eraser" | "pan") => void;
+  onToolChange: (tool: InkTool) => void;
   onColorChange: (value: string) => void;
   onSizeChange: (value: number) => void;
   onShowGridChange: (value: boolean) => void;
   onShowTextPanelChange: (value: boolean) => void;
   onAppendStroke: (noteId: string, stroke: Note["strokes"][number]) => void;
   onEraseAt: (noteId: string, x: number, y: number, radius: number) => void;
+  onDeleteStrokes: (noteId: string, strokeIds: string[]) => void;
+  onMoveStrokes: (noteId: string, strokeIds: string[], dx: number, dy: number) => void;
   onPanViewport: (noteId: string, dx: number, dy: number) => void;
   onZoomViewportAt: (noteId: string, nextScale: number, anchorX: number, anchorY: number) => void;
   onResetViewport: () => void;
@@ -55,6 +57,8 @@ export function NoteEditor({
   onShowTextPanelChange,
   onAppendStroke,
   onEraseAt,
+  onDeleteStrokes,
+  onMoveStrokes,
   onPanViewport,
   onZoomViewportAt,
   onResetViewport,
@@ -169,6 +173,8 @@ export function NoteEditor({
           showGrid={showGrid}
           onAppendStroke={onAppendStroke}
           onEraseAt={onEraseAt}
+          onDeleteStrokes={onDeleteStrokes}
+          onMoveStrokes={onMoveStrokes}
           onPanViewport={onPanViewport}
           onZoomViewportAt={onZoomViewportAt}
         />

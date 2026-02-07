@@ -32,6 +32,8 @@ export default function App(): JSX.Element {
     setShowTextPanel,
     appendStroke,
     eraseAt,
+    deleteStrokes,
+    moveStrokes,
     panViewport,
     zoomViewportAt,
     resetViewport,
@@ -66,7 +68,7 @@ export default function App(): JSX.Element {
 
     try {
       const parsed = JSON.parse(raw) as Partial<{
-        tool: "pen" | "eraser" | "pan";
+        tool: "pen" | "eraser" | "pan" | "selector" | "highlighter";
         color: string;
         size: number;
         showGrid: boolean;
@@ -206,6 +208,8 @@ export default function App(): JSX.Element {
             onShowTextPanelChange={setShowTextPanel}
             onAppendStroke={appendStroke}
             onEraseAt={eraseAt}
+            onDeleteStrokes={deleteStrokes}
+            onMoveStrokes={moveStrokes}
             onPanViewport={panViewport}
             onZoomViewportAt={zoomViewportAt}
             onResetViewport={resetViewport}

@@ -1,5 +1,7 @@
 import { useEffect, useRef } from "react";
 import type { InkTool } from "../types";
+import { Pen, Eraser, Hand, SquareDashedMousePointer, Highlighter } from "lucide-react";
+import { useState } from "react";
 
 interface ToolbarProps {
   tool: InkTool;
@@ -26,6 +28,15 @@ interface ToolbarProps {
   onImportBundle: (file: File) => void;
 }
 
+const HIGHLIGHTER_COLORS = [
+  { name: "Yellow", value: "#FFEB3B" },
+  { name: "Green", value: "#4CAF50" },
+  { name: "Blue", value: "#2196F3" },
+  { name: "Pink", value: "#FF4081" },
+  { name: "Orange", value: "#FF9800" },
+  { name: "Purple", value: "#9C27B0" },
+];
+
 export function Toolbar({
   tool,
   color,
@@ -51,6 +62,8 @@ export function Toolbar({
   onImportBundle,
 }: ToolbarProps): JSX.Element {
   const settingsRef = useRef<HTMLDetailsElement | null>(null);
+  const [showHighlighterMenu, setShowHighlighterMenu] = useState(false);
+  const [highlighterColor, setHighlighterColor] = useState(HIGHLIGHTER_COLORS[0].value);
 
   useEffect(() => {
     const handlePointerDown = (event: PointerEvent) => {
@@ -77,19 +90,77 @@ export function Toolbar({
     };
   }, []);
 
-  const toolButton = (name: InkTool, label: string) => (
+  const toolButton = (name: InkTool, icon: JSX.Element) => (
     <button
-      className={`btn h-9 min-w-20 ${tool === name ? "btn-active" : ""}`}
+      className={`flex h-10 w-10 items-center justify-center rounded-full transition-colors ${
+        tool === name 
+          ? "bg-slate-700 text-white hover:bg-slate-600" 
+          : "text-slate-700 hover:bg-slate-200"
+      }`}
       type="button"
       onClick={() => onToolChange(name)}
+      title={name.charAt(0).toUpperCase() + name.slice(1)}
     >
-      {label}
+      {icon}
     </button>
   );
 
+  const handleHighlighterColorSelect = (newColor: string) => {
+    setHighlighterColor(newColor);
+    onColorChange(newColor);
+    onToolChange("highlighter");
+  };
+
   return (
     <div className="flex min-w-0 items-center gap-2 border-b border-slate-100 p-3">
-      <div className="flex min-w-0 items-center gap-2">{toolButton("pen", "Pen")}{toolButton("eraser", "Eraser")}{toolButton("pan", "Pan")}</div>
+      <div className="flex min-w-0 items-center gap-2">
+        {toolButton("pen", <Pen size={20} />)}
+        {toolButton("eraser", <Eraser size={20} />)}
+        {toolButton("pan", <Hand size={20} />)}
+        {toolButton("selector", <SquareDashedMousePointer size={20} />)}
+        
+        {/* Highlighter with color dropdown */}
+        <div 
+          className="relative"
+          onMouseEnter={() => setShowHighlighterMenu(true)}
+          onMouseLeave={() => setShowHighlighterMenu(false)}
+        >
+          <button
+            className={`flex h-10 w-10 items-center justify-center rounded-full transition-colors ${
+              tool === "highlighter" 
+                ? "bg-slate-700 text-white hover:bg-slate-600" 
+                : "text-slate-700 hover:bg-slate-200"
+            }`}
+            type="button"
+            onClick={() => {
+              onColorChange(highlighterColor);
+              onToolChange("highlighter");
+            }}
+            title="Highlighter"
+          >
+            <Highlighter size={20} />
+          </button>
+          
+          {/* Color dropdown menu */}
+          {showHighlighterMenu && (
+            <div className="absolute left-0 top-12 z-50 flex gap-1 rounded-lg border border-slate-200 bg-white p-2 shadow-lg">
+              {HIGHLIGHTER_COLORS.map((c) => (
+                <button
+                  key={c.value}
+                  className="h-8 w-8 rounded-md border-2 transition-transform hover:scale-110"
+                  style={{ 
+                    backgroundColor: c.value,
+                    borderColor: highlighterColor === c.value ? "#334155" : "transparent"
+                  }}
+                  onClick={() => handleHighlighterColorSelect(c.value)}
+                  title={c.name}
+                  type="button"
+                />
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
 
       <span className="ml-auto w-14 text-center text-sm font-semibold text-slate-700">{zoomPercent}%</span>
       <button className={`btn h-9 ${isFullscreen ? "btn-active" : ""}`} type="button" onClick={onToggleFullscreen}>

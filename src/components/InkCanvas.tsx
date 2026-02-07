@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { InkPoint, InkStroke, InkTool, Note } from "../types";
 import { drawStrokePolygon, strokePolygon, uid } from "../utils/ink";
 
@@ -10,6 +10,8 @@ interface InkCanvasProps {
   showGrid: boolean;
   onAppendStroke: (noteId: string, stroke: InkStroke) => void;
   onEraseAt: (noteId: string, x: number, y: number, radius: number) => void;
+  onDeleteStrokes: (noteId: string, strokeIds: string[]) => void;
+  onMoveStrokes: (noteId: string, strokeIds: string[], dx: number, dy: number) => void;
   onPanViewport: (noteId: string, dx: number, dy: number) => void;
   onZoomViewportAt: (noteId: string, nextScale: number, anchorX: number, anchorY: number) => void;
   onExportReady?: (exportFn: () => string) => void;
@@ -25,6 +27,8 @@ export function InkCanvas({
   showGrid,
   onAppendStroke,
   onEraseAt,
+  onDeleteStrokes,
+  onMoveStrokes,
   onPanViewport,
   onZoomViewportAt,
   onExportReady,
@@ -38,6 +42,11 @@ export function InkCanvas({
   const panPointerId = useRef<number | null>(null);
   const currentPointsRef = useRef<InkPoint[]>([]);
   const lastPanRef = useRef<{ x: number; y: number } | null>(null);
+  
+  const [selectionBox, setSelectionBox] = useState<{ startX: number; startY: number; endX: number; endY: number } | null>(null);
+  const [selectedStrokes, setSelectedStrokes] = useState<string[]>([]);
+  const [isDraggingSelection, setIsDraggingSelection] = useState(false);
+  const [dragOffset, setDragOffset] = useState<{ x: number; y: number } | null>(null);
 
   const drawScene = useCallback(() => {
     const canvas = canvasRef.current;
@@ -89,40 +98,70 @@ export function InkCanvas({
     ctx.scale(note.viewport.scale, note.viewport.scale);
 
     for (const stroke of note.strokes) {
+      const isSelected = selectedStrokes.includes(stroke.id);
+      const opacity = stroke.tool === "highlighter" ? 0.4 : 1;
+      
+      ctx.save();
+      ctx.globalAlpha = opacity;
+      
       const polygon = strokePolygon(stroke);
       if (polygon.length >= 2) {
         drawStrokePolygon(ctx, polygon, stroke.color, 0, 0);
-        continue;
+      } else {
+        const point = stroke.points[stroke.points.length - 1];
+        if (point) {
+          const radius = Math.max(0.5, (stroke.baseSize * Math.max(0.1, point.pressure)) / 2);
+          ctx.beginPath();
+          ctx.arc(point.x, point.y, radius, 0, Math.PI * 2);
+          ctx.fillStyle = stroke.color;
+          ctx.fill();
+        }
       }
-      const point = stroke.points[stroke.points.length - 1];
-      if (!point) {
-        continue;
+      
+      ctx.restore();
+      
+      if (isSelected && tool === "selector") {
+        const points = stroke.points;
+        if (points.length > 0) {
+          const xs = points.map(p => p.x);
+          const ys = points.map(p => p.y);
+          const minX = Math.min(...xs);
+          const minY = Math.min(...ys);
+          const maxX = Math.max(...xs);
+          const maxY = Math.max(...ys);
+          
+          ctx.strokeStyle = "#3b82f6";
+          ctx.lineWidth = 2 / note.viewport.scale;
+          ctx.setLineDash([5 / note.viewport.scale, 5 / note.viewport.scale]);
+          ctx.strokeRect(minX - 5, minY - 5, maxX - minX + 10, maxY - minY + 10);
+          ctx.setLineDash([]);
+        }
       }
-      const radius = Math.max(0.5, (stroke.baseSize * Math.max(0.1, point.pressure)) / 2);
-      ctx.beginPath();
-      ctx.arc(point.x, point.y, radius, 0, Math.PI * 2);
-      ctx.fillStyle = stroke.color;
-      ctx.fill();
     }
 
-    if (currentPointsRef.current.length === 1 && tool === "pen") {
+    if (currentPointsRef.current.length === 1 && (tool === "pen" || tool === "highlighter")) {
       const point = currentPointsRef.current[0];
       const radius = Math.max(0.5, (size * Math.max(0.1, point.pressure)) / 2);
+      ctx.save();
+      ctx.globalAlpha = tool === "highlighter" ? 0.4 : 1;
       ctx.beginPath();
       ctx.arc(point.x, point.y, radius, 0, Math.PI * 2);
       ctx.fillStyle = color;
       ctx.fill();
-    } else if (currentPointsRef.current.length > 1 && tool === "pen") {
+      ctx.restore();
+    } else if (currentPointsRef.current.length > 1 && (tool === "pen" || tool === "highlighter")) {
       const tempStroke: InkStroke = {
         id: "temp",
-        tool: "pen",
+        tool: tool === "highlighter" ? "highlighter" : "pen",
         color,
         baseSize: size,
         points: currentPointsRef.current,
       };
       const polygon = strokePolygon(tempStroke);
       if (polygon.length >= 2) {
-        drawStrokePolygon(ctx, polygon, tempStroke.color, 0, 0);
+        ctx.save();
+      ctx.globalAlpha = tool === "highlighter" ? 0.4 : 1;
+      drawStrokePolygon(ctx, polygon, tempStroke.color, 0, 0);
       } else {
         const point = tempStroke.points[tempStroke.points.length - 1];
         if (point) {
@@ -133,10 +172,24 @@ export function InkCanvas({
           ctx.fill();
         }
       }
+      ctx.restore();
+    }
+    
+    if (selectionBox && tool === "selector") {
+      ctx.strokeStyle = "#3b82f6";
+      ctx.lineWidth = 2 / note.viewport.scale;
+      ctx.setLineDash([5 / note.viewport.scale, 5 / note.viewport.scale]);
+      ctx.strokeRect(
+        Math.min(selectionBox.startX, selectionBox.endX),
+        Math.min(selectionBox.startY, selectionBox.endY),
+        Math.abs(selectionBox.endX - selectionBox.startX),
+        Math.abs(selectionBox.endY - selectionBox.startY)
+      );
+      ctx.setLineDash([]);
     }
 
     ctx.restore();
-  }, [color, note.strokes, note.viewport.offsetX, note.viewport.offsetY, note.viewport.scale, showGrid, size, tool]);
+  }, [color, note.strokes, note.viewport.offsetX, note.viewport.offsetY, note.viewport.scale, showGrid, size, tool, selectedStrokes, selectionBox]);
 
   const scheduleDraw = useCallback(() => {
     if (rafRef.current !== null) {
@@ -186,6 +239,14 @@ export function InkCanvas({
   useEffect(() => {
     scheduleDraw();
   }, [note, tool, size, color, scheduleDraw]);
+
+  useEffect(() => {
+    // Clear selection when switching away from selector tool
+    if (tool !== "selector" && selectedStrokes.length > 0) {
+      setSelectedStrokes([]);
+      setSelectionBox(null);
+    }
+  }, [tool, selectedStrokes.length]);
 
   useEffect(() => {
     if (!onExportReady) {
@@ -246,7 +307,7 @@ export function InkCanvas({
     }
 
     const handlePointerRawUpdate = (event: Event) => {
-      if (tool !== "pen" || !(event instanceof PointerEvent)) {
+      if ((tool !== "pen" && tool !== "highlighter") || !(event instanceof PointerEvent)) {
         return;
       }
       if (!isDrawingRef.current || drawingPointerId.current !== event.pointerId) {
@@ -281,7 +342,7 @@ export function InkCanvas({
 
     const stroke: InkStroke = {
       id: uid(),
-      tool: "pen",
+      tool: (tool === "pen" || tool === "highlighter") ? tool : "pen",
       color,
       baseSize: size,
       points: [...currentPointsRef.current],
@@ -315,6 +376,39 @@ export function InkCanvas({
       canvas.setPointerCapture(e.pointerId);
       const point = toWorldPoint(e.clientX, e.clientY);
       onEraseAt(note.id, point.x, point.y, eraserRadius);
+      return;
+    }
+    
+    if (tool === "selector") {
+      const point = toWorldPoint(e.clientX, e.clientY);
+      
+      // Check if clicking on selected strokes to drag
+      const clickedStroke = note.strokes.find(stroke => {
+        if (!selectedStrokes.includes(stroke.id)) return false;
+        const points = stroke.points;
+        if (points.length === 0) return false;
+        
+        const xs = points.map(p => p.x);
+        const ys = points.map(p => p.y);
+        const minX = Math.min(...xs);
+        const minY = Math.min(...ys);
+        const maxX = Math.max(...xs);
+        const maxY = Math.max(...ys);
+        
+        return point.x >= minX - 5 && point.x <= maxX + 5 && 
+               point.y >= minY - 5 && point.y <= maxY + 5;
+      });
+      
+      if (clickedStroke) {
+        setIsDraggingSelection(true);
+        setDragOffset({ x: point.x, y: point.y });
+        drawingPointerId.current = e.pointerId;
+        canvas.setPointerCapture(e.pointerId);
+      } else {
+        drawingPointerId.current = e.pointerId;
+        setSelectionBox({ startX: point.x, startY: point.y, endX: point.x, endY: point.y });
+        canvas.setPointerCapture(e.pointerId);
+      }
       return;
     }
 
@@ -359,6 +453,22 @@ export function InkCanvas({
       onEraseAt(note.id, point.x, point.y, eraserRadius);
       return;
     }
+    
+    if (tool === "selector") {
+      const point = toWorldPoint(e.clientX, e.clientY);
+      
+      if (isDraggingSelection && dragOffset) {
+        const dx = point.x - dragOffset.x;
+        const dy = point.y - dragOffset.y;
+        onMoveStrokes(note.id, selectedStrokes, dx, dy);
+        setDragOffset(point);
+        scheduleDraw();
+      } else if (selectionBox) {
+        setSelectionBox(prev => prev ? { ...prev, endX: point.x, endY: point.y } : null);
+        scheduleDraw();
+      }
+      return;
+    }
 
     // Coalesced events improve ink quality on high-frequency pen sampling.
     pushPointerEvent(e);
@@ -378,9 +488,33 @@ export function InkCanvas({
       return;
     }
 
-    if (isDrawingRef.current) {
-      if (tool === "pen") {
-        finishStroke();
+    if (drawingPointerId.current === e.pointerId) {
+      if (tool === "pen" || tool === "highlighter") {
+        if (isDrawingRef.current) {
+          finishStroke();
+        }
+      } else if (tool === "selector") {
+        if (isDraggingSelection && dragOffset) {
+          setIsDraggingSelection(false);
+          setDragOffset(null);
+        } else if (selectionBox) {
+          // Select strokes within the box
+          const minX = Math.min(selectionBox.startX, selectionBox.endX);
+          const maxX = Math.max(selectionBox.startX, selectionBox.endX);
+          const minY = Math.min(selectionBox.startY, selectionBox.endY);
+          const maxY = Math.max(selectionBox.startY, selectionBox.endY);
+          
+          const selected = note.strokes.filter(stroke => {
+            const points = stroke.points;
+            if (points.length === 0) return false;
+            
+            return points.some(p => p.x >= minX && p.x <= maxX && p.y >= minY && p.y <= maxY);
+          }).map(s => s.id);
+          
+          setSelectedStrokes(selected);
+          setSelectionBox(null);
+          scheduleDraw();
+        }
       }
       isDrawingRef.current = false;
       drawingPointerId.current = null;
@@ -401,12 +535,28 @@ export function InkCanvas({
     onZoomViewportAt(note.id, nextScale, canvasPoint.x, canvasPoint.y);
   };
 
+  // Keyboard handler for deleting selected strokes
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if ((e.key === "Backspace" || e.key === "Delete") && selectedStrokes.length > 0 && tool === "selector") {
+        e.preventDefault();
+        onDeleteStrokes(note.id, selectedStrokes);
+        setSelectedStrokes([]);
+      }
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => {
+      window.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [selectedStrokes, tool, note.id, onDeleteStrokes]);
+
   return (
     <div className="relative h-full min-h-0 w-full overflow-hidden rounded-b-2xl bg-slate-50" ref={containerRef}>
       <canvas
         ref={canvasRef}
         className="block h-full w-full touch-none"
-        style={{ cursor: tool === "pan" ? "grab" : tool === "eraser" ? "cell" : "crosshair" }}
+        style={{ cursor: tool === "pan" ? "grab" : tool === "eraser" ? "cell" : tool === "selector" ? "default" : "crosshair" }}
         onPointerDown={handlePointerDown}
         onPointerMove={handlePointerMove}
         onPointerUp={handlePointerUp}
