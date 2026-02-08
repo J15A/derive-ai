@@ -11,7 +11,7 @@ interface FadingStroke {
 
 const techStack = [
   { name: "Gemini", logo: "https://www.google.com/s2/favicons?domain=gemini.google.com&sz=128" },
-  { name: "Wolfram Alpha", logo: "https://www.google.com/s2/favicons?domain=wolframalpha.com&sz=128" },
+  { name: "OpenRouter", logo: "https://www.google.com/s2/favicons?domain=openrouter.ai&sz=128" },
   { name: "Desmos", logo: "https://www.google.com/s2/favicons?domain=desmos.com&sz=128" },
   { name: "Auth0", logo: "https://www.google.com/s2/favicons?domain=auth0.com&sz=128" },
 ];
@@ -249,11 +249,11 @@ export default function LandingPage(): JSX.Element {
               AI math workspace
             </p>
             <h1 className="text-4xl font-bold leading-tight tracking-tight text-slate-950 sm:text-5xl">
-              Solve math on a whiteboard.
-              <span className="block text-cyan-700">Accelerate with AI.</span>
+              Efficient Math Workflow.
+              <span className="block text-cyan-700">Accelerated with AI.</span>
             </h1>
             <p className="mt-5 max-w-2xl text-base leading-7 text-slate-600 sm:text-lg">
-              Derive AI combines freeform math whiteboarding with intelligent derivations, hints, and checks, so you can move from messy ideas to clear solutions quickly.
+              Derive AI combines freeform math whiteboarding with intelligent derivations, explanations, and checks, so you can move from messy ideas to clear solutions quickly.
             </p>
             <div className="mt-8 flex flex-wrap gap-3">
               {isAuthenticated ? (
@@ -321,13 +321,13 @@ export default function LandingPage(): JSX.Element {
           <h2 className="text-3xl font-semibold tracking-tight text-slate-900">About Derive AI</h2>
           <div className="mt-6 rounded-2xl border border-slate-200 bg-white p-6 leading-7 text-slate-700 shadow-sm">
             <p>
-              Derive AI was built during a hackathon to address a common problem: students and builders think visually on whiteboards, but most math tools force rigid input and break creative flow.
+              Derive AI was built during the 2026 CxC AI Hackathon to address a common problem: students and builders think visually on whiteboards, but widespread math tools don't support a seamless AI-powered workflow.
             </p>
             <p className="mt-4">
-              The project aims to keep the freedom of sketching while adding AI guidance. You can write naturally, get fast derivation support, verify steps, and move from intuition to structured math without context switching.
+              Our team has developed a comprehensive whiteboard application with fluid AI integration. You can write naturally, get instant explanations, verify steps, and move from intuition to structured math without context switching.
             </p>
             <p className="mt-4">
-              Our goal is to make advanced math tooling feel immediate, accessible, and trustworthy for learning, prototyping, and collaboration.
+              Our goal is to make complex, AI-powered math workflows feel immediate, accessible, and optimized.
             </p>
           </div>
         </motion.section>
@@ -355,7 +355,7 @@ export default function LandingPage(): JSX.Element {
       <footer className="relative z-10 border-t border-slate-200 bg-white">
         <div className="mx-auto flex w-full max-w-6xl flex-col gap-3 px-5 py-8 text-sm text-slate-600 sm:flex-row sm:items-center sm:justify-between">
           <p>© {new Date().getFullYear()} Derive AI</p>
-          <p className="text-xs text-slate-500">Built at a hackathon to simplify real-world math workflows.</p>
+          <p className="text-xs text-slate-500">Built at the 2026 CxC AI Hackathon to simplify real-world math workflows.</p>
         </div>
       </footer>
     </div>
