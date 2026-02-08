@@ -32,7 +32,7 @@ GEMINI_API_KEY=your-gemini-api-key
 GEMINI_MODEL=gemini-flash-latest
 
 OPENROUTER_API_KEY=your-openrouter-api-key
-OPENROUTER_SOLVER_MODEL=deepseek/deepseek-r1
+OPENROUTER_SOLVER_MODEL=openai/gpt-4o
 OPENROUTER_RECOGNITION_MODEL=openai/gpt-4o
 YOUR_SITE_URL=http://localhost:3001
 ```
@@ -49,7 +49,7 @@ Server URL: `http://localhost:3001`
 
 This backend uses OpenRouter to access various AI models:
 
-- **Equation Solving** (`/api/solve`): Uses `deepseek/deepseek-r1` (configurable via `OPENROUTER_SOLVER_MODEL`) - a powerful reasoning model that shows its thought process
+- **Equation Solving** (`/api/solve`): Uses `openai/gpt-4o` (configurable via `OPENROUTER_SOLVER_MODEL`) - a powerful chat model for solving complex math problems
 - **Handwriting Recognition** (`/api/recognize`, `/api/graph`, `/api/nextstep`): Uses `openai/gpt-4o` (configurable via `OPENROUTER_RECOGNITION_MODEL`) - a strong model for accurate OCR/handwriting recognition
 - **Chat** (`/api/chat`): Uses Gemini API (configurable via `GEMINI_MODEL`) for interactive conversations
 

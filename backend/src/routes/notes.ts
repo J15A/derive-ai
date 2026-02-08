@@ -151,25 +151,72 @@ router.post("/bulk", async (req: Request, res: Response) => {
       return res.status(400).json({ error: "Expected an array of notes" });
     }
     
-    // Use bulk operations for better performance
-    const bulkOps = notes.map(note => {
-      // Remove _id from the note to avoid MongoDB immutable field error
-      const { _id, ownerSub: _ignoredOwnerSub, ...noteWithoutId } = note as any;
-      
-      return {
-        updateOne: {
-          filter: { ownerSub, id: note.id },
-          update: { $set: { ...noteWithoutId, ownerSub } },
-          upsert: true
-        }
-      };
-    });
+    // MongoDB has a 16MB document size limit
+    const MAX_DOC_SIZE = 16 * 1024 * 1024; // 16MB in bytes
+    const BATCH_SIZE = 10; // Process 10 notes at a time
     
-    if (bulkOps.length > 0) {
-      await getNotesCollection().bulkWrite(bulkOps);
+    let successCount = 0;
+    let errorCount = 0;
+    const errors: Array<{ noteId: string; error: string }> = [];
+    
+    // Process notes in batches to avoid overwhelming MongoDB
+    for (let i = 0; i < notes.length; i += BATCH_SIZE) {
+      const batch = notes.slice(i, i + BATCH_SIZE);
+      const bulkOps = [];
+      
+      for (const note of batch) {
+        // Remove _id from the note to avoid MongoDB immutable field error
+        const { _id, ownerSub: _ignoredOwnerSub, ...noteWithoutId } = note as any;
+        const noteData = { ...noteWithoutId, ownerSub };
+        
+        // Rough estimate of document size (JSON.stringify gives byte estimate)
+        const estimatedSize = JSON.stringify(noteData).length;
+        
+        if (estimatedSize > MAX_DOC_SIZE) {
+          errorCount++;
+          errors.push({
+            noteId: note.id || 'unknown',
+            error: `Document too large (${(estimatedSize / 1024 / 1024).toFixed(2)}MB). Consider reducing strokes or chat history.`
+          });
+          continue;
+        }
+        
+        bulkOps.push({
+          updateOne: {
+            filter: { ownerSub, id: note.id },
+            update: { $set: noteData },
+            upsert: true
+          }
+        });
+      }
+      
+      if (bulkOps.length > 0) {
+        try {
+          await getNotesCollection().bulkWrite(bulkOps);
+          successCount += bulkOps.length;
+        } catch (batchError) {
+          console.error("Error in batch write:", batchError);
+          errorCount += bulkOps.length;
+          errors.push({
+            noteId: 'batch',
+            error: batchError instanceof Error ? batchError.message : 'Unknown batch error'
+          });
+        }
+      }
     }
     
-    res.json({ success: true, count: notes.length });
+    const response: any = { 
+      success: errorCount === 0, 
+      successCount, 
+      errorCount,
+      totalCount: notes.length 
+    };
+    
+    if (errors.length > 0) {
+      response.errors = errors;
+    }
+    
+    res.json(response);
   } catch (error) {
     console.error("Error bulk saving notes:", error);
     res.status(500).json({ error: "Failed to bulk save notes" });

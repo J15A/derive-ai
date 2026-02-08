@@ -2,13 +2,13 @@ import { Router, Request, Response } from "express";
 
 const router = Router();
 
-// Strong model for solving - using a thinking model for better reasoning
-// DeepSeek R1 is a powerful reasoning model that shows its thought process
-const SOLVER_MODEL = process.env.OPENROUTER_SOLVER_MODEL || "deepseek/deepseek-r1";
+// Strong model for solving - using GPT-4o for better reasoning
+// GPT-4o is a powerful chat model that can accurately solve complex math problems
+const SOLVER_MODEL = process.env.OPENROUTER_SOLVER_MODEL || "openai/gpt-4";
 
 // Recognition model for graph (also using GPT-4o for better accuracy)
 // Upgraded from gpt-4o-mini to gpt-4o for better handwriting recognition
-export const RECOGNITION_MODEL = process.env.OPENROUTER_RECOGNITION_MODEL || "openai/gpt-4o";
+export const RECOGNITION_MODEL = process.env.OPENROUTER_RECOGNITION_MODEL || "openai/gpt-5.2-chat";
 
 router.post("/", async (req: Request, res: Response) => {
   try {
@@ -60,41 +60,6 @@ router.post("/", async (req: Request, res: Response) => {
               {
                 type: "text",
                 text: `You are a math expert specializing in handwriting recognition. Look at this handwritten mathematical expression or equation in the image and recognize it accurately.
-
-CRITICAL RECOGNITION TIPS:
-- Pay close attention to distinguish similar characters:
-  * "x" vs "×" (letter x vs multiplication)
-  * "0" (zero) vs "O" (letter O)
-  * "1" (one) vs "l" (lowercase L) vs "|" (vertical bar)
-  * "2" vs "Z"
-  * "5" vs "S"
-  * "6" vs "b"
-  * "(" vs "[" vs "{"
-  * "+" vs "t"
-  * "-" vs "–" vs "—" (different dash lengths)
-  * "=" vs "≡"
-  * Exponents are typically smaller and positioned higher
-  * Subscripts are typically smaller and positioned lower
-- SQUARE ROOT RECOGNITION - CRITICAL:
-  * The radical symbol (√) looks like a checkmark with an overline
-  * Common notations: "√x", "sqrt(x)", "√(x)", or just a radical over the expression
-  * "sqrt x = 4" means √x = 4 (square root of x equals 4)
-  * "sqrt(x + 1)" means √(x + 1)
-  * The horizontal bar extends over everything under the radical
-  * Don't confuse √ with "v", "V", or a checkmark
-- Look at mathematical context to disambiguate:
-  * Between numbers, "x" is likely multiplication
-  * As a variable in equations, "x" is the letter x
-  * In expressions like "2x", the x is a variable (no multiplication sign needed)
-- Recognize common mathematical patterns:
-  * Quadratic form: ax² + bx + c
-  * Fractions typically have a horizontal line between numerator and denominator
-  * Square roots: √x, √(expression), or ∛x for cube roots
-  * Exponents are superscript
-- Handle different handwriting styles:
-  * Some people write "1" with a serif, others without
-  * "7" may or may not have a cross-bar
-  * "4" can be written open or closed
 
 INSTRUCTIONS:
 1. Carefully recognize what is written in the image with attention to detail
@@ -160,16 +125,17 @@ INSTRUCTIONS:
 5. Format your response using LaTeX
 
 RESPONSE FORMAT - CRITICAL:
+- You may think to yourself step by step, but all math must be on its own lines
 - Output ONLY LaTeX math expressions wrapped in SINGLE dollar signs: $expression$
 - DO NOT use double dollar signs ($$), only single $ delimiters
 - NO blank lines between steps
 - NO English words, NO labels like "Step 1:", NO explanations
 - Each step should be on its own line as: $math expression$
-- For implicit equations, you may use \\text{} to describe what it represents
 - For integrals, use proper notation: \\int with \\, dx, show intermediate steps, include +C for indefinite integrals
 - Use LaTeX arrow (\\to) or equals signs to show progression
 - The last line should be the final answer
 - Use proper LaTeX formatting for fractions, exponents, integrals, etc.
+- For equations that cannot be solved without graphing stop at the simplifed, you may state in latex \text{Cannot be solved analytically}
 
 EXAMPLES:
 For "$2x + 4 = 10$":
@@ -201,7 +167,7 @@ $= 2 \\cdot \\frac{x^2}{2} + C$
 $= x^2 + C$
 
 IMPORTANT: 
-- Output ONLY math in LaTeX format. English words only inside \\text{} when necessary
+- Output ONLY math in LaTeX format.
 - Keep output compact and avoid overly verbose steps`,
           },
         ],
@@ -231,41 +197,28 @@ IMPORTANT:
     // Clean up the result - ensure it's properly formatted
     let formattedResult = result;
     
-    // Remove blank lines
-    formattedResult = formattedResult
-      .split('\n')
-      .filter(line => line.trim().length > 0)
-      .join('\n');
-    
     // Replace $$ with $ for consistency (we want inline mode, not display mode)
     formattedResult = formattedResult.replace(/\$\$/g, '$');
     
-    // Fix lines that are missing opening $ delimiter
-    // Pattern: lines that start with LaTeX content but missing opening $
+    // Filter to only keep properly formatted LaTeX lines
     formattedResult = formattedResult
       .split('\n')
-      .map(line => {
-        const trimmed = line.trim();
+      .map(line => line.trim())
+      .filter(line => {
+        // Skip empty lines
+        if (line.length === 0) return false;
         
-        // If line ends with $ but doesn't start with $, add opening $
-        if (trimmed.endsWith('$') && !trimmed.startsWith('$')) {
-          return '$' + trimmed;
+        // Only keep lines that are properly formatted LaTeX
+        // Valid lines must start with $ and end with $
+        const isProperlyFormatted = line.startsWith('$') && line.endsWith('$');
+        
+        // Also check that there's actual content between the dollar signs
+        if (isProperlyFormatted) {
+          const content = line.slice(1, -1).trim();
+          return content.length > 0;
         }
         
-        // If line starts with $ but doesn't end with $, add closing $
-        if (trimmed.startsWith('$') && !trimmed.endsWith('$')) {
-          return trimmed + '$';
-        }
-        
-        // If line contains LaTeX commands but no delimiters at all, wrap it
-        if (!trimmed.includes('$') && (
-          trimmed.includes('\\') || 
-          trimmed.match(/[a-z]\^|_\{|\\frac|\\sqrt|\\text/)
-        )) {
-          return '$' + trimmed + '$';
-        }
-        
-        return line;
+        return false;
       })
       .join('\n');
 
