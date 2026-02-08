@@ -9,6 +9,7 @@ import nextstepRouter from "./routes/nextstep.js";
 import graphRouter from "./routes/graph.js";
 import recognizeRouter from "./routes/recognize.js";
 import chatRouter from "./routes/chat.js";
+import checkRouter from "./routes/check.js";
 
 dotenv.config();
 
@@ -37,6 +38,7 @@ app.use("/api/solve", solveRouter);
 app.use("/api/nextstep", nextstepRouter);
 app.use("/api/graph", graphRouter);
 app.use("/api/recognize", recognizeRouter);
+app.use("/api/check", checkRouter);
 app.use("/api/chat", requireAuth, chatRouter);
 
 // Error handling middleware

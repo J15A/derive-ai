@@ -1,4 +1,4 @@
-import { Bot, Copy, Trash2, Palette, Calculator, Loader2, LineChart, ArrowRight } from "lucide-react";
+import { Bot, Copy, Trash2, Palette, Calculator, Loader2, LineChart, ArrowRight, CheckCircle } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 
 interface SelectionPopupProps {
@@ -7,6 +7,7 @@ interface SelectionPopupProps {
   isGettingNextStep?: boolean;
   isGraphing?: boolean;
   isExplaining?: boolean;
+  isChecking?: boolean;
   onDelete: () => void;
   onDuplicate: () => void;
   onChangeColor: (color: string) => void;
@@ -14,6 +15,7 @@ interface SelectionPopupProps {
   onNextStep: () => void;
   onAddToGraph: () => void;
   onExplainWithGemini: () => void;
+  onCheckWork: () => void;
   onClose: () => void;
 }
 
@@ -34,6 +36,7 @@ export function SelectionPopup({
   isGettingNextStep = false,
   isGraphing = false,
   isExplaining = false,
+  isChecking = false,
   onDelete, 
   onDuplicate, 
   onChangeColor,
@@ -41,6 +44,7 @@ export function SelectionPopup({
   onNextStep,
   onAddToGraph,
   onExplainWithGemini,
+  onCheckWork,
   onClose 
 }: SelectionPopupProps): JSX.Element {
   const popupRef = useRef<HTMLDivElement>(null);
@@ -130,6 +134,16 @@ export function SelectionPopup({
         type="button"
       >
         {isExplaining ? <Loader2 size={18} className="animate-spin" /> : <Bot size={18} />}
+      </button>
+
+      <button
+        className="flex items-center justify-center rounded-md p-2 text-amber-600 transition-colors hover:bg-amber-50 disabled:opacity-50"
+        onClick={onCheckWork}
+        disabled={isChecking}
+        title="Check My Work"
+        type="button"
+      >
+        {isChecking ? <Loader2 size={18} className="animate-spin" /> : <CheckCircle size={18} />}
       </button>
 
       <div className="relative">

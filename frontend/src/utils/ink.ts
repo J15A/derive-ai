@@ -119,10 +119,16 @@ export function strokeIntersectsCircle(
     return false;
   }
 
+  // For highlighter strokes, check collision with the center line since they're visual highlights
+  // For pen strokes, use the actual stroke width for collision
+  const strokeRadius = stroke.tool === "highlighter" 
+    ? Math.min(stroke.baseSize * 0.3, 10) // Highlighters: smaller collision radius (easier to erase)
+    : stroke.baseSize * 0.5; // Pen: use half the baseSize
+  
   for (let i = 1; i < pts.length; i += 1) {
     const a = pts[i - 1];
     const b = pts[i];
-    if (pointToSegmentDistance(x, y, a.x, a.y, b.x, b.y) <= radius + stroke.baseSize * 0.5) {
+    if (pointToSegmentDistance(x, y, a.x, a.y, b.x, b.y) <= radius + strokeRadius) {
       return true;
     }
   }

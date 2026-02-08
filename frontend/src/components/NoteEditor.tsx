@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import type { ChatMessage, Note, NoteBundle, InkTool, WhiteboardImage, ShapeType, Shape } from "../types";
+import type { ChatMessage, Note, NoteBundle, InkTool, WhiteboardImage, ShapeType, Shape, TextAnnotation } from "../types";
 import { buildNoteBundle } from "../store/noteStore";
 import { strokesToPngDataUrl } from "../utils/ink";
 import { uid } from "../utils/ink";
@@ -53,6 +53,7 @@ interface NoteEditorProps {
   onScaleImages: (noteId: string, imageIds: string[], scale: number, centerX: number, centerY: number) => void;
   onPanViewport: (noteId: string, dx: number, dy: number) => void;
   onZoomViewportAt: (noteId: string, nextScale: number, anchorX: number, anchorY: number) => void;
+  onAddTextAnnotation: (noteId: string, annotation: TextAnnotation) => void;
   onResetViewport: () => void;
   onUndo: () => void;
   onRedo: () => void;
@@ -112,6 +113,7 @@ export function NoteEditor({
   onChangeStrokesColor,
   onPanViewport,
   onZoomViewportAt,
+  onAddTextAnnotation,
   onResetViewport,
   onUndo,
   onRedo,
@@ -738,6 +740,7 @@ export function NoteEditor({
           onScaleImages={onScaleImages}
           onPanViewport={onPanViewport}
           onZoomViewportAt={onZoomViewportAt}
+          onAddTextAnnotation={onAddTextAnnotation}
           onAddToGraph={handleAddToGraph}
           onExplainWithGemini={onExplainWithGemini}
         />

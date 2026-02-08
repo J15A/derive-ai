@@ -68,6 +68,7 @@ export default function WhiteboardApp(): JSX.Element {
     scaleImages,
     panViewport,
     zoomViewportAt,
+    addTextAnnotation,
     resetViewport,
     undoInk,
     redoInk,
@@ -539,6 +540,7 @@ export default function WhiteboardApp(): JSX.Element {
               onScaleImages={scaleImages}
               onPanViewport={panViewport}
               onZoomViewportAt={zoomViewportAt}
+              onAddTextAnnotation={addTextAnnotation}
               onResetViewport={resetViewport}
               onUndo={undoInk}
               onRedo={redoInk}

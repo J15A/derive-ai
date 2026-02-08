@@ -197,6 +197,32 @@ export async function recognizeSelectionContent(imageDataUrl: string): Promise<s
   return data.text;
 }
 
+export interface CheckResult {
+  correct: boolean;
+  totalLines: number;
+  errorLine: number | null;
+  explanation: string | null;
+  error?: string;
+}
+
+export async function checkSolution(imageDataUrl: string): Promise<CheckResult> {
+  const response = await fetch(`${API_BASE_URL}/check`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ imageDataUrl }),
+  });
+
+  if (!response.ok) {
+    const body = await response.json().catch(() => ({}));
+    throw new Error((body as { error?: string }).error || `Failed to check solution: ${response.statusText}`);
+  }
+
+  const data = (await response.json()) as CheckResult;
+  return data;
+}
+
 interface ChatApiMessage {
   role: ChatRole;
   content: string;

@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import type { InkPoint, InkStroke, InkTool, Note, WhiteboardImage, ShapeType, Shape } from "../types";
+import type { InkPoint, InkStroke, InkTool, Note, WhiteboardImage, ShapeType, Shape, TextAnnotation } from "../types";
 import { drawStrokePolygon, strokePolygon, strokesToPngDataUrl, uid } from "../utils/ink";
-import { solveEquation, recognizeEquationForGraph, recognizeSelectionContent, getNextStep } from "../api/client";
+import { solveEquation, recognizeEquationForGraph, recognizeSelectionContent, getNextStep, checkSolution } from "../api/client";
 import { SelectionPopup } from "./SelectionPopup";
 import { textToImage } from "../utils/textToImage";
 
@@ -31,6 +31,7 @@ interface InkCanvasProps {
   onScaleImages: (noteId: string, imageIds: string[], scale: number, centerX: number, centerY: number) => void;
   onPanViewport: (noteId: string, dx: number, dy: number) => void;
   onZoomViewportAt: (noteId: string, nextScale: number, anchorX: number, anchorY: number) => void;
+  onAddTextAnnotation: (noteId: string, annotation: TextAnnotation) => void;
   onAddToGraph?: (latex: string) => void;
   onExplainWithGemini?: (recognizedText: string) => Promise<void> | void;
   onExportReady?: (exportFn: () => string) => void;
@@ -65,6 +66,7 @@ export function InkCanvas({
   onAddImage,
   onPanViewport,
   onZoomViewportAt,
+  onAddTextAnnotation,
   onAddToGraph,
   onExplainWithGemini,
   onExportReady,
@@ -95,6 +97,7 @@ export function InkCanvas({
   const [isGettingNextStep, setIsGettingNextStep] = useState(false);
   const [isGraphing, setIsGraphing] = useState(false);
   const [isExplaining, setIsExplaining] = useState(false);
+  const [isChecking, setIsChecking] = useState(false);
   const [textInput, setTextInput] = useState<{ x: number; y: number; worldX: number; worldY: number } | null>(null);
   const [textValue, setTextValue] = useState("");
   const [tempShape, setTempShape] = useState<{ startX: number; startY: number; endX: number; endY: number } | null>(null);
@@ -1634,6 +1637,395 @@ export function InkCanvas({
     }
   };
 
+  const handlePopupCheckWork = async () => {
+    const selectedStrokeObjects = note.strokes.filter((stroke) => selectedStrokes.includes(stroke.id));
+    const selectedImageObjects = note.images.filter((image) => selectedImages.includes(image.id));
+
+    if (selectedStrokeObjects.length === 0 && selectedImageObjects.length === 0) return;
+
+    setIsChecking(true);
+
+    try {
+      console.log("Step 1: Calculating selection bounds");
+      
+      // Calculate bounding box of selection (both strokes and images)
+      let minX = Infinity;
+      let minY = Infinity;
+      let maxX = -Infinity;
+      let maxY = -Infinity;
+
+      for (const stroke of selectedStrokeObjects) {
+        for (const p of stroke.points) {
+          minX = Math.min(minX, p.x);
+          minY = Math.min(minY, p.y);
+          maxX = Math.max(maxX, p.x);
+          maxY = Math.max(maxY, p.y);
+        }
+      }
+
+      for (const image of selectedImageObjects) {
+        minX = Math.min(minX, image.x);
+        minY = Math.min(minY, image.y);
+        maxX = Math.max(maxX, image.x + image.width);
+        maxY = Math.max(maxY, image.y + image.height);
+      }
+
+      if (minX === Infinity || minY === Infinity || maxX === -Infinity || maxY === -Infinity) {
+        alert("⚠️ Could not determine selection bounds");
+        return;
+      }
+
+      console.log("Step 2: Capturing rendered canvas region");
+      const canvas = canvasRef.current;
+      if (!canvas) {
+        alert("⚠️ Canvas not available");
+        return;
+      }
+
+      const rect = canvas.getBoundingClientRect();
+      const dprX = rect.width > 0 ? canvas.width / rect.width : 1;
+      const dprY = rect.height > 0 ? canvas.height / rect.height : 1;
+      const padding = 20;
+
+      const cropX = minX * note.viewport.scale + note.viewport.offsetX - padding;
+      const cropY = minY * note.viewport.scale + note.viewport.offsetY - padding;
+      const cropW = (maxX - minX) * note.viewport.scale + padding * 2;
+      const cropH = (maxY - minY) * note.viewport.scale + padding * 2;
+
+      const srcX = Math.max(0, Math.floor(cropX * dprX));
+      const srcY = Math.max(0, Math.floor(cropY * dprY));
+      const srcW = Math.max(1, Math.min(canvas.width - srcX, Math.ceil(cropW * dprX)));
+      const srcH = Math.max(1, Math.min(canvas.height - srcY, Math.ceil(cropH * dprY)));
+
+      // Create a temporary canvas to extract the selection
+      const tempCanvas = document.createElement("canvas");
+      tempCanvas.width = srcW;
+      tempCanvas.height = srcH;
+      const tempCtx = tempCanvas.getContext("2d");
+      if (!tempCtx) {
+        alert("⚠️ Could not create temporary canvas");
+        return;
+      }
+
+      // Fill with white background
+      tempCtx.fillStyle = "#ffffff";
+      tempCtx.fillRect(0, 0, srcW, srcH);
+
+      // Copy the selected region from the main canvas
+      tempCtx.drawImage(canvas, srcX, srcY, srcW, srcH, 0, 0, srcW, srcH);
+
+      const imageDataUrl = tempCanvas.toDataURL("image/png");
+      console.log("Step 3: Screenshot captured, length:", imageDataUrl.length);
+
+      if (!imageDataUrl) {
+        alert("⚠️ Could not capture the selected content");
+        return;
+      }
+
+      console.log("Step 4: Calling checkSolution API");
+      const result = await checkSolution(imageDataUrl);
+      console.log("Step 5: API response received:", result);
+
+      if (result.error) {
+        alert(`⚠️ ${result.error}`);
+        return;
+      }
+
+      console.log("Step 6: Starting line clustering (strokes + images)");
+      // Group selected strokes AND images into horizontal "lines" by clustering on Y-center
+      // Each stroke and image contributes a vertical center point; we cluster items whose
+      // centers are within a tolerance of each other into the same line.
+      type LineItem = { 
+        id: string; 
+        type: 'stroke' | 'image'; 
+        yCenter: number; 
+        minX: number; 
+        maxX: number; 
+        minY: number; 
+        maxY: number;
+      };
+      
+      const lineItems: LineItem[] = [];
+
+      // Add strokes as line items
+      for (const stroke of selectedStrokeObjects) {
+        let sMinX = Infinity, sMinY = Infinity, sMaxX = -Infinity, sMaxY = -Infinity;
+        for (const p of stroke.points) {
+          sMinX = Math.min(sMinX, p.x);
+          sMinY = Math.min(sMinY, p.y);
+          sMaxX = Math.max(sMaxX, p.x);
+          sMaxY = Math.max(sMaxY, p.y);
+        }
+        lineItems.push({
+          id: stroke.id,
+          type: 'stroke',
+          yCenter: (sMinY + sMaxY) / 2,
+          minX: sMinX, maxX: sMaxX, minY: sMinY, maxY: sMaxY,
+        });
+      }
+
+      // Add images as line items (each image is a separate line)
+      for (const image of selectedImageObjects) {
+        lineItems.push({
+          id: image.id,
+          type: 'image',
+          yCenter: image.y + image.height / 2,
+          minX: image.x,
+          maxX: image.x + image.width,
+          minY: image.y,
+          maxY: image.y + image.height,
+        });
+      }
+
+      console.log(`Step 7: Found ${lineItems.length} items (${selectedStrokeObjects.length} strokes + ${selectedImageObjects.length} images)`);
+
+      if (lineItems.length === 0) {
+        alert("⚠️ Could not analyze the selection");
+        return;
+      }
+
+      // Sort by Y center
+      lineItems.sort((a, b) => a.yCenter - b.yCenter);
+      console.log("Step 8: Sorted items by Y position");
+
+      // Cluster into lines using a tolerance based on average item height
+      const avgHeight = lineItems.reduce((sum, s) => sum + (s.maxY - s.minY), 0) / lineItems.length;
+      const tolerance = Math.max(avgHeight * 0.75, 15);
+      console.log(`Step 9: Clustering with tolerance ${tolerance}, avgHeight ${avgHeight}`);
+
+      const lines: Array<{ minX: number; maxX: number; minY: number; maxY: number }> = [];
+      
+      if (lineItems.length === 1) {
+        // Only one item - treat as a single line
+        const s = lineItems[0];
+        lines.push({ minX: s.minX, maxX: s.maxX, minY: s.minY, maxY: s.maxY });
+        console.log("Step 10: Single item detected, created 1 line");
+      } else {
+        // Multiple items - cluster into lines
+        let currentLine = { 
+          minX: lineItems[0].minX, 
+          maxX: lineItems[0].maxX, 
+          minY: lineItems[0].minY, 
+          maxY: lineItems[0].maxY, 
+          lastYCenter: lineItems[0].yCenter 
+        };
+
+        for (let i = 1; i < lineItems.length; i++) {
+          const s = lineItems[i];
+          if (s.yCenter - currentLine.lastYCenter > tolerance) {
+            // New line
+            lines.push({ minX: currentLine.minX, maxX: currentLine.maxX, minY: currentLine.minY, maxY: currentLine.maxY });
+            currentLine = { minX: s.minX, maxX: s.maxX, minY: s.minY, maxY: s.maxY, lastYCenter: s.yCenter };
+          } else {
+            // Same line - extend bounds
+            currentLine.minX = Math.min(currentLine.minX, s.minX);
+            currentLine.maxX = Math.max(currentLine.maxX, s.maxX);
+            currentLine.minY = Math.min(currentLine.minY, s.minY);
+            currentLine.maxY = Math.max(currentLine.maxY, s.maxY);
+            currentLine.lastYCenter = s.yCenter;
+          }
+        }
+        lines.push({ minX: currentLine.minX, maxX: currentLine.maxX, minY: currentLine.minY, maxY: currentLine.maxY });
+        console.log(`Step 10: Multiple strokes clustered into ${lines.length} lines`);
+      }
+
+      console.log(`Step 11: Creating highlights. Result: correct=${result.correct}, errorLine=${result.errorLine}, totalLines=${result.totalLines}, detected ${lines.length} lines`);
+
+      // Warn if mismatch between AI-detected lines and our clustering
+      if (result.totalLines !== lines.length) {
+        console.warn(`⚠️ Line count mismatch: AI detected ${result.totalLines} lines, but we clustered ${lines.length} lines`);
+      }
+
+      // Create highlight strokes with more padding for better coverage
+      const highlightPadding = 20;
+
+      if (result.correct) {
+        console.log("Step 12: All correct - highlighting the last line in green");
+        // Highlight only the LAST line in green to indicate the final answer is correct
+        if (lines.length > 0) {
+          const line = lines[lines.length - 1];
+          
+          if (line && typeof line.minX === 'number' && typeof line.maxX === 'number' && 
+              typeof line.minY === 'number' && typeof line.maxY === 'number') {
+            console.log(`Creating green highlight for last line:`, line);
+            const highlightHeight = Math.max(line.maxY - line.minY, 10); // Ensure minimum height
+            const rightShift = 55; // Shift highlight to the right for better text alignment
+            const highlightStroke: InkStroke = {
+              id: uid(),
+              tool: "highlighter",
+              color: "#10B981", // green
+              baseSize: highlightHeight + highlightPadding * 2,
+              points: [
+                { x: line.minX - highlightPadding + rightShift, y: (line.minY + line.maxY) / 2, pressure: 0.5, timestamp: Date.now() },
+                { x: line.maxX + highlightPadding + rightShift, y: (line.minY + line.maxY) / 2, pressure: 0.5, timestamp: Date.now() + 1 },
+              ],
+            };
+            console.log(`About to append green highlight stroke`);
+            onAppendStroke(note.id, highlightStroke);
+            console.log(`Successfully appended green highlight`);
+          } else {
+            console.error(`Last line is invalid:`, line);
+          }
+        }
+        console.log("Step 13: Highlight created successfully");
+        
+        // Add success message as green text below the selection
+        if (lines.length > 0) {
+          const lastLine = lines[lines.length - 1];
+          const messageY = lastLine.maxY + 30; // Position below the last line
+          const messageX = lastLine.minX;
+          
+          console.log("About to add success text annotation:", { x: messageX, y: messageY });
+          onAddTextAnnotation(note.id, {
+            id: uid(),
+            x: messageX,
+            y: messageY,
+            text: "✓ All steps are correct!",
+            fontSize: 18,
+            color: "#10B981", // green
+          });
+          console.log("Success text annotation added");
+        }
+      } else if (result.errorLine !== null && result.errorLine >= 1) {
+        console.log(`Step 12: Error on line ${result.errorLine} - highlighting in red`);
+        
+        // Try to find the best matching line to highlight
+        // If we have fewer lines than expected, highlight the closest line we can
+        let lineToHighlight: { minX: number; maxX: number; minY: number; maxY: number } | null = null;
+        let highlightLineNumber = result.errorLine;
+        
+        if (result.errorLine <= lines.length) {
+          // Exact match - use the specified line
+          const errorLineIndex = result.errorLine - 1; // Convert from 1-based to 0-based
+          lineToHighlight = lines[errorLineIndex];
+          console.log(`Using exact line match at index ${errorLineIndex}`);
+        } else if (lines.length > 0) {
+          // AI detected more lines than we clustered - highlight the last line we have
+          lineToHighlight = lines[lines.length - 1];
+          highlightLineNumber = lines.length;
+          console.warn(`Line count mismatch: AI says error on line ${result.errorLine}, but we only have ${lines.length} lines. Highlighting line ${lines.length}.`);
+        }
+
+        if (!lineToHighlight) {
+          console.error(`Error: Could not find any line to highlight. Lines array:`, lines);
+          alert(`⚠️ Could not locate error line ${result.errorLine}. Detected ${lines.length} lines.`);
+          return;
+        }
+
+        console.log(`Creating red highlight for line ${highlightLineNumber}:`, lineToHighlight);
+        const highlightHeight = Math.max(lineToHighlight.maxY - lineToHighlight.minY, 10); // Ensure minimum height
+        const rightShift = 55; // Shift highlight to the right for better text alignment
+        const highlightStroke: InkStroke = {
+          id: uid(),
+          tool: "highlighter",
+          color: "#EF4444", // red
+          baseSize: highlightHeight + highlightPadding * 2,
+          points: [
+            { x: lineToHighlight.minX - highlightPadding + rightShift, y: (lineToHighlight.minY + lineToHighlight.maxY) / 2, pressure: 0.5, timestamp: Date.now() },
+            { x: lineToHighlight.maxX + highlightPadding + rightShift, y: (lineToHighlight.minY + lineToHighlight.maxY) / 2, pressure: 0.5, timestamp: Date.now() + 1 },
+          ],
+        };
+        console.log("About to append red highlight stroke");
+        onAppendStroke(note.id, highlightStroke);
+        console.log("Step 13: Red highlight created successfully");
+
+        // Add error message as red text below the error line
+        const messageY = lineToHighlight.maxY + 30; // Position below the error line
+        const messageX = lineToHighlight.minX;
+        
+        let errorMessage = `✗ Mistake on line ${result.errorLine}`;
+        if (result.explanation) {
+          errorMessage += `\n${result.explanation}`;
+        }
+        if (result.errorLine !== highlightLineNumber) {
+          errorMessage += `\n(Highlighted line ${highlightLineNumber})`;
+        }
+        
+        console.log("About to add error text annotation:", { x: messageX, y: messageY, text: errorMessage });
+        onAddTextAnnotation(note.id, {
+          id: uid(),
+          x: messageX,
+          y: messageY,
+          text: errorMessage,
+          fontSize: 18,
+          color: "#EF4444", // red
+        });
+        console.log("Error text annotation added");
+      } else {
+        console.warn(`Invalid error line number: ${result.errorLine}`);
+        // Add warning message
+        if (lines.length > 0) {
+          const lastLine = lines[lines.length - 1];
+          onAddTextAnnotation(note.id, {
+            id: uid(),
+            x: lastLine.minX,
+            y: lastLine.maxY + 30,
+            text: `⚠ Error reported on invalid line ${result.errorLine}`,
+            fontSize: 18,
+            color: "#F59E0B", // amber/orange
+          });
+        }
+      }
+
+      console.log("Step 14: Scheduling redraw");
+      // Force immediate redraw
+      scheduleDraw();
+
+      console.log("Step 15: Clearing selection");
+      // Clear selection
+      setSelectedStrokes([]);
+      setSelectedImages([]);
+      setSelectedShapes([]);
+      setSelectionBox(null);
+      
+      console.log("Step 16: Check complete!");
+    } catch (error) {
+      console.error("Failed to check work:", error);
+      console.error("Error stack:", error instanceof Error ? error.stack : "No stack trace");
+      const message = error instanceof Error ? error.message : "Failed to check solution";
+      
+      // Add error message as red text - position it below the selection if possible
+      const selectedStrokeObjects = note.strokes.filter((stroke) => selectedStrokes.includes(stroke.id));
+      const selectedImageObjects = note.images.filter((image) => selectedImages.includes(image.id));
+      
+      let messageX = 50;
+      let messageY = 50;
+      
+      if (selectedStrokeObjects.length > 0 || selectedImageObjects.length > 0) {
+        let maxY = -Infinity;
+        let minX = Infinity;
+        
+        for (const stroke of selectedStrokeObjects) {
+          for (const p of stroke.points) {
+            maxY = Math.max(maxY, p.y);
+            minX = Math.min(minX, p.x);
+          }
+        }
+        for (const image of selectedImageObjects) {
+          maxY = Math.max(maxY, image.y + image.height);
+          minX = Math.min(minX, image.x);
+        }
+        
+        if (maxY !== -Infinity) {
+          messageY = maxY + 30;
+          messageX = minX;
+        }
+      }
+      
+      onAddTextAnnotation(note.id, {
+        id: uid(),
+        x: messageX,
+        y: messageY,
+        text: `✗ Error checking work\n${message}`,
+        fontSize: 18,
+        color: "#EF4444", // red
+      });
+    } finally {
+      setIsChecking(false);
+      setShowPopup(false);
+    }
+  };
+
   const handlePopupClose = () => {
     setShowPopup(false);
   };
@@ -1693,6 +2085,7 @@ export function InkCanvas({
                 isGettingNextStep={isGettingNextStep}
                 isGraphing={isGraphing}
                 isExplaining={isExplaining}
+                isChecking={isChecking}
                 onDelete={handlePopupDelete}
                 onDuplicate={handlePopupDuplicate}
                 onChangeColor={handlePopupChangeColor}
@@ -1700,6 +2093,7 @@ export function InkCanvas({
                 onNextStep={handlePopupNextStep}
                 onAddToGraph={handlePopupAddToGraph}
                 onExplainWithGemini={handlePopupExplainWithGemini}
+                onCheckWork={handlePopupCheckWork}
                 onClose={handlePopupClose}
             />
         )}

@@ -82,6 +82,7 @@ npm run dev
 - Solve selected math: `OPENROUTER_API_KEY` (`OPENROUTER_SOLVER_MODEL` optional, defaults to `openai/gpt-4o`)
 - Add selected math to graph: `OPENROUTER_API_KEY` (`OPENROUTER_RECOGNITION_MODEL` optional, defaults to `openai/gpt-4o`)
 - Handwriting recognition: `OPENROUTER_API_KEY` (`OPENROUTER_RECOGNITION_MODEL` optional)
+- Check my work: `OPENROUTER_API_KEY` (`OPENROUTER_CHECK_MODEL` optional, falls back to `OPENROUTER_SOLVER_MODEL`)
 
 ## API Routes
 
@@ -95,6 +96,7 @@ npm run dev
 - `POST /api/chat`
 - `POST /api/solve`
 - `POST /api/graph`
+- `POST /api/check`
 
 ## Additional Docs
 
