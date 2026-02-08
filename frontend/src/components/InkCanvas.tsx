@@ -1330,7 +1330,7 @@ export function InkCanvas({
     }
   };
 
-  const handleWheel = (e: React.WheelEvent<HTMLCanvasElement>) => {
+  const handleWheel = useCallback((e: WheelEvent) => {
     e.preventDefault();
 
     const canvasPoint = getCanvasSpacePoint(e.clientX, e.clientY);
@@ -1339,7 +1339,19 @@ export function InkCanvas({
     const nextScale = note.viewport.scale * zoomFactor;
 
     onZoomViewportAt(note.id, nextScale, canvasPoint.x, canvasPoint.y);
-  };
+  }, [getCanvasSpacePoint, note.id, note.viewport.scale, onZoomViewportAt]);
+
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) {
+      return;
+    }
+
+    canvas.addEventListener("wheel", handleWheel, { passive: false });
+    return () => {
+      canvas.removeEventListener("wheel", handleWheel);
+    };
+  }, [handleWheel]);
 
   // Keyboard handler for deleting selected strokes, images, and shapes
   useEffect(() => {
@@ -2206,7 +2218,6 @@ export function InkCanvas({
             onPointerMove={handlePointerMove}
             onPointerUp={handlePointerUp}
             onPointerCancel={handlePointerUp}
-            onWheel={handleWheel}
             onContextMenu={(e) => e.preventDefault()}
         />
 
