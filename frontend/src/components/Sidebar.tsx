@@ -1,11 +1,14 @@
 import { memo, useDeferredValue, useId, useMemo, useState, useTransition } from "react";
-import { ChevronLeft, Trash2 } from "lucide-react";
+import { ChevronLeft, Home, Trash2 } from "lucide-react";
 import type { Note } from "../types";
 
 interface SidebarProps {
   notes: Note[];
   selectedNoteId: string | null;
   searchQuery: string;
+  userLabel?: string;
+  onGoHome?: () => void;
+  onLogout?: () => void;
   isCollapsed: boolean;
   onSearch: (query: string) => void;
   onSelect: (id: string) => void;
@@ -20,6 +23,9 @@ function SidebarImpl({
   notes,
   selectedNoteId,
   searchQuery,
+  userLabel,
+  onGoHome,
+  onLogout,
   isCollapsed,
   onSearch,
   onSelect,
@@ -50,7 +56,7 @@ function SidebarImpl({
   }
 
   return (
-    <aside className="relative z-30 flex h-full min-h-0 flex-col rounded-2xl border border-slate-200 bg-panel shadow-soft transition-transform duration-300 ease-in-out max-sm:rounded-none max-sm:border-x-0 max-sm:border-t-0">
+    <aside className="relative z-30 flex h-full min-h-0 flex-col overflow-hidden rounded-2xl border border-slate-200 bg-panel shadow-soft transition-transform duration-300 ease-in-out max-sm:rounded-none max-sm:border-x-0 max-sm:border-t-0">
       <button
         onClick={onToggleCollapse}
         className="absolute -right-8 top-1/2 z-10 flex h-24 w-8 -translate-y-1/2 items-center justify-center rounded-r-2xl border border-l-0 border-slate-200 bg-panel text-slate-500 transition-all duration-200 hover:w-10 hover:-right-10 hover:bg-slate-50 hover:text-slate-700 max-sm:hidden"
@@ -61,6 +67,31 @@ function SidebarImpl({
       </button>
 
       <div className="space-y-2 border-b border-slate-100 p-3 max-sm:space-y-3">
+        {userLabel && onLogout ? (
+          <div className="mb-4 flex items-center justify-between rounded-lg border border-slate-200 bg-white px-2.5 py-2">
+            <div className="flex min-w-0 items-center gap-2">
+              {onGoHome ? (
+                <button
+                  type="button"
+                  className="inline-flex h-6 w-6 items-center justify-center rounded border border-slate-200 bg-white text-slate-600 transition hover:bg-slate-100 hover:text-slate-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-500"
+                  onClick={onGoHome}
+                  title="Go to landing page"
+                  aria-label="Go to landing page"
+                >
+                  <Home size={12} />
+                </button>
+              ) : null}
+              <span className="max-w-[140px] truncate text-xs text-slate-600">{userLabel}</span>
+            </div>
+            <button
+              type="button"
+              className="rounded bg-slate-100 px-2 py-1 text-xs font-medium text-slate-700 transition-colors hover:bg-slate-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-500"
+              onClick={onLogout}
+            >
+              Log Out
+            </button>
+          </div>
+        ) : null}
         <button className="btn btn-active w-full" onClick={onCreate} type="button">
           New Note
         </button>

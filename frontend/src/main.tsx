@@ -1,6 +1,7 @@
 import React from "react";
 import ReactDOM from "react-dom/client";
 import { Auth0Provider } from "@auth0/auth0-react";
+import { BrowserRouter } from "react-router-dom";
 import App from "./App";
 import "./styles.css";
 import "katex/dist/katex.min.css";
@@ -18,10 +19,16 @@ ReactDOM.createRoot(document.getElementById("root") as HTMLElement).render(
         redirect_uri: window.location.origin,
         audience: auth0Audience,
       }}
+      onRedirectCallback={(appState) => {
+        const returnTo = appState?.returnTo || "/app";
+        window.history.replaceState({}, document.title, returnTo);
+      }}
       cacheLocation="localstorage"
       useRefreshTokens
     >
-      <App />
+      <BrowserRouter>
+        <App />
+      </BrowserRouter>
     </Auth0Provider>
   </React.StrictMode>,
 );

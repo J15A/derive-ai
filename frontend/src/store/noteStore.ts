@@ -37,7 +37,7 @@ interface NoteState {
   setHydrated: (value: boolean) => void;
   setNotes: (notes: Note[]) => void;
   selectNote: (id: string) => void;
-  createNote: () => void;
+  createNote: () => Note;
   renameNote: (id: string, title: string) => void;
   deleteNote: (id: string) => void;
   reorderNotes: (fromIndex: number, toIndex: number) => void;
@@ -143,6 +143,7 @@ export const useNoteStore = create<NoteState>((set, get) => ({
       selectedNoteId: note.id,
       activeTab: "ink",
     }));
+    return note;
   },
   renameNote: (id, title) => {
     const cleanTitle = title.trim() || "Untitled Note";
