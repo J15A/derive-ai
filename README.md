@@ -48,6 +48,8 @@ GEMINI_API_KEY=your-gemini-api-key
 GEMINI_MODEL=gemini-flash-latest
 
 OPENROUTER_API_KEY=your-openrouter-api-key
+OPENROUTER_SOLVER_MODEL=deepseek/deepseek-r1
+OPENROUTER_RECOGNITION_MODEL=openai/gpt-4o
 YOUR_SITE_URL=http://localhost:3001
 
 MIGRATION_OWNER_SUB=
@@ -77,8 +79,9 @@ npm run dev
 
 - Auth/login + notes API: `VITE_AUTH0_*`, `AUTH0_*`
 - Chat widget: `GEMINI_API_KEY` (`GEMINI_MODEL` optional)
-- Solve selected math: `OPENROUTER_API_KEY`
-- Add selected math to graph: `OPENROUTER_API_KEY`
+- Solve selected math: `OPENROUTER_API_KEY` (`OPENROUTER_SOLVER_MODEL` optional, defaults to `deepseek/deepseek-r1`)
+- Add selected math to graph: `OPENROUTER_API_KEY` (`OPENROUTER_RECOGNITION_MODEL` optional, defaults to `openai/gpt-4o`)
+- Handwriting recognition: `OPENROUTER_API_KEY` (`OPENROUTER_RECOGNITION_MODEL` optional)
 
 ## API Routes
 

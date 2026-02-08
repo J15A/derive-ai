@@ -4,11 +4,11 @@ const router = Router();
 
 // Strong model for solving - using a thinking model for better reasoning
 // DeepSeek R1 is a powerful reasoning model that shows its thought process
-const SOLVER_MODEL = "deepseek/deepseek-r1";
+const SOLVER_MODEL = process.env.OPENROUTER_SOLVER_MODEL || "deepseek/deepseek-r1";
 
 // Recognition model for graph (also using GPT-4o for better accuracy)
 // Upgraded from gpt-4o-mini to gpt-4o for better handwriting recognition
-export const RECOGNITION_MODEL = "openai/gpt-4o";
+export const RECOGNITION_MODEL = process.env.OPENROUTER_RECOGNITION_MODEL || "openai/gpt-4o";
 
 router.post("/", async (req: Request, res: Response) => {
   try {
