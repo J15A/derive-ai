@@ -249,7 +249,7 @@ export default function LandingPage(): JSX.Element {
               AI math workspace
             </p>
             <h1 className="text-4xl font-bold leading-tight tracking-tight text-slate-950 sm:text-5xl">
-              Think on a whiteboard.
+              Solve math on a whiteboard.
               <span className="block text-cyan-700">Accelerate with AI.</span>
             </h1>
             <p className="mt-5 max-w-2xl text-base leading-7 text-slate-600 sm:text-lg">

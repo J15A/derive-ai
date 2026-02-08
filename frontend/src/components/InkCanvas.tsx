@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import type { InkPoint, InkStroke, InkTool, Note, TextAnnotation, WhiteboardImage, ShapeType, Shape } from "../types";
+import type { InkPoint, InkStroke, InkTool, Note, WhiteboardImage, ShapeType, Shape } from "../types";
 import { drawStrokePolygon, strokePolygon, strokesToPngDataUrl, uid } from "../utils/ink";
-import { solveEquation, recognizeEquationForGraph } from "../api/client";
+import { solveEquation, recognizeEquationForGraph, recognizeSelectionContent } from "../api/client";
 import { SelectionPopup } from "./SelectionPopup";
 import { textToImage } from "../utils/textToImage";
 
@@ -20,7 +20,6 @@ interface InkCanvasProps {
   onMoveStrokes: (noteId: string, strokeIds: string[], dx: number, dy: number) => void;
   onDuplicateStrokes: (noteId: string, strokeIds: string[]) => string[];
   onChangeStrokesColor: (noteId: string, strokeIds: string[], newColor: string) => void;
-  onAddTextAnnotation: (noteId: string, annotation: TextAnnotation) => void;
   onAddShape: (noteId: string, shape: Shape) => void;
   onDeleteShapes: (noteId: string, shapeIds: string[]) => void;
   onMoveShapes: (noteId: string, shapeIds: string[], dx: number, dy: number) => void;
@@ -62,7 +61,6 @@ export function InkCanvas({
   onScaleShapes,
   onDuplicateStrokes,
   onChangeStrokesColor,
-  onAddTextAnnotation,
   onAddShape,
   onAddImage,
   onPanViewport,
@@ -1380,9 +1378,8 @@ export function InkCanvas({
   };
 
   const handlePopupExplainWithGemini = async () => {
-    const selectedStrokeObjects = note.strokes.filter((stroke) => selectedStrokes.includes(stroke.id));
-    if (selectedStrokeObjects.length === 0) {
-      alert("Select handwritten notes first.");
+    if (selectedStrokes.length === 0 && selectedImages.length === 0 && selectedShapes.length === 0) {
+      alert("Select note content first.");
       return;
     }
     if (!onExplainWithGemini) {
@@ -1392,15 +1389,84 @@ export function InkCanvas({
     setIsExplaining(true);
 
     try {
-      const imageDataUrl = strokesToPngDataUrl(selectedStrokeObjects);
-      const recognizedText = await recognizeEquationForGraph(imageDataUrl);
+      let minX = Infinity;
+      let minY = Infinity;
+      let maxX = -Infinity;
+      let maxY = -Infinity;
+
+      for (const stroke of note.strokes) {
+        if (!selectedStrokes.includes(stroke.id)) continue;
+        for (const p of stroke.points) {
+          minX = Math.min(minX, p.x);
+          minY = Math.min(minY, p.y);
+          maxX = Math.max(maxX, p.x);
+          maxY = Math.max(maxY, p.y);
+        }
+      }
+
+      for (const image of note.images) {
+        if (!selectedImages.includes(image.id)) continue;
+        minX = Math.min(minX, image.x);
+        minY = Math.min(minY, image.y);
+        maxX = Math.max(maxX, image.x + image.width);
+        maxY = Math.max(maxY, image.y + image.height);
+      }
+
+      for (const shape of note.shapes) {
+        if (!selectedShapes.includes(shape.id)) continue;
+        const sx = Math.min(shape.x, shape.x + shape.width);
+        const sy = Math.min(shape.y, shape.y + shape.height);
+        const sx2 = Math.max(shape.x, shape.x + shape.width);
+        const sy2 = Math.max(shape.y, shape.y + shape.height);
+        minX = Math.min(minX, sx);
+        minY = Math.min(minY, sy);
+        maxX = Math.max(maxX, sx2);
+        maxY = Math.max(maxY, sy2);
+      }
+
+      if (minX === Infinity || minY === Infinity || maxX === -Infinity || maxY === -Infinity) {
+        throw new Error("Could not compute selection bounds");
+      }
+
+      const canvas = canvasRef.current;
+      if (!canvas) {
+        throw new Error("Canvas not available");
+      }
+
+      const rect = canvas.getBoundingClientRect();
+      const dprX = rect.width > 0 ? canvas.width / rect.width : 1;
+      const dprY = rect.height > 0 ? canvas.height / rect.height : 1;
+      const padding = 12;
+
+      const cropX = minX * note.viewport.scale + note.viewport.offsetX - padding;
+      const cropY = minY * note.viewport.scale + note.viewport.offsetY - padding;
+      const cropW = (maxX - minX) * note.viewport.scale + padding * 2;
+      const cropH = (maxY - minY) * note.viewport.scale + padding * 2;
+
+      const srcX = Math.max(0, Math.floor(cropX * dprX));
+      const srcY = Math.max(0, Math.floor(cropY * dprY));
+      const srcW = Math.max(1, Math.min(canvas.width - srcX, Math.ceil(cropW * dprX)));
+      const srcH = Math.max(1, Math.min(canvas.height - srcY, Math.ceil(cropH * dprY)));
+
+      const tempCanvas = document.createElement("canvas");
+      tempCanvas.width = srcW;
+      tempCanvas.height = srcH;
+      const tempCtx = tempCanvas.getContext("2d");
+      if (!tempCtx) {
+        throw new Error("Failed to prepare selection image");
+      }
+
+      tempCtx.drawImage(canvas, srcX, srcY, srcW, srcH, 0, 0, srcW, srcH);
+      const imageDataUrl = tempCanvas.toDataURL("image/png");
+      const recognizedText = await recognizeSelectionContent(imageDataUrl);
       await onExplainWithGemini(recognizedText);
       setSelectedStrokes([]);
       setSelectedImages([]);
+      setSelectedShapes([]);
       setSelectionBox(null);
     } catch (error) {
       console.error("Failed to explain with Gemini:", error);
-      const message = error instanceof Error ? error.message : "Failed to recognize selection";
+      const message = error instanceof Error ? error.message : "Failed to recognize selected content";
       alert(`Could not explain selection.\n\n${message}`);
     } finally {
       setIsExplaining(false);

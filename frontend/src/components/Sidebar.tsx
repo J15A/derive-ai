@@ -56,7 +56,7 @@ function SidebarImpl({
   }
 
   return (
-    <aside className="relative z-30 flex h-full min-h-0 flex-col overflow-hidden rounded-2xl border border-slate-200 bg-panel shadow-soft transition-transform duration-300 ease-in-out max-sm:rounded-none max-sm:border-x-0 max-sm:border-t-0">
+    <aside className="relative z-30 flex h-full min-h-0 flex-col overflow-visible rounded-2xl border border-slate-200 bg-panel shadow-soft transition-transform duration-300 ease-in-out max-sm:rounded-none max-sm:border-x-0 max-sm:border-t-0">
       <button
         onClick={onToggleCollapse}
         className="absolute -right-8 top-1/2 z-10 flex h-24 w-8 -translate-y-1/2 items-center justify-center rounded-r-2xl border border-l-0 border-slate-200 bg-panel text-slate-500 transition-all duration-200 hover:w-10 hover:-right-10 hover:bg-slate-50 hover:text-slate-700 max-sm:hidden"

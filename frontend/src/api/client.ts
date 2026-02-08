@@ -161,6 +161,24 @@ export async function recognizeEquationForGraph(imageDataUrl: string): Promise<s
   return data.latex;
 }
 
+export async function recognizeSelectionContent(imageDataUrl: string): Promise<string> {
+  const response = await fetch(`${API_BASE_URL}/recognize`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ imageDataUrl }),
+  });
+
+  if (!response.ok) {
+    const body = await response.json().catch(() => ({}));
+    throw new Error((body as { error?: string }).error || `Failed to recognize selection: ${response.statusText}`);
+  }
+
+  const data = (await response.json()) as { text: string };
+  return data.text;
+}
+
 interface ChatApiMessage {
   role: ChatRole;
   content: string;

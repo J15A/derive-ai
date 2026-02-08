@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import type { ChatMessage, Note, NoteBundle, InkTool, TextAnnotation, WhiteboardImage, ShapeType, Shape } from "../types";
+import type { ChatMessage, Note, NoteBundle, InkTool, WhiteboardImage, ShapeType, Shape } from "../types";
 import { buildNoteBundle } from "../store/noteStore";
 import { strokesToPngDataUrl } from "../utils/ink";
 import { uid } from "../utils/ink";
@@ -42,7 +42,6 @@ interface NoteEditorProps {
   onMoveStrokes: (noteId: string, strokeIds: string[], dx: number, dy: number) => void;
   onDuplicateStrokes: (noteId: string, strokeIds: string[]) => string[];
   onChangeStrokesColor: (noteId: string, strokeIds: string[], newColor: string) => void;
-  onAddTextAnnotation: (noteId: string, annotation: TextAnnotation) => void;
   onAddShape: (noteId: string, shape: Shape) => void;
   onDeleteShapes: (noteId: string, shapeIds: string[]) => void;
   onMoveShapes: (noteId: string, shapeIds: string[], dx: number, dy: number) => void;
@@ -111,7 +110,6 @@ export function NoteEditor({
   onMoveStrokes,
   onDuplicateStrokes,
   onChangeStrokesColor,
-  onAddTextAnnotation,
   onPanViewport,
   onZoomViewportAt,
   onResetViewport,
@@ -729,7 +727,6 @@ export function NoteEditor({
           onMoveStrokes={onMoveStrokes}
           onDuplicateStrokes={onDuplicateStrokes}
           onChangeStrokesColor={onChangeStrokesColor}
-          onAddTextAnnotation={onAddTextAnnotation}
           onAddShape={onAddShape}
           onDeleteShapes={onDeleteShapes}
           onMoveShapes={onMoveShapes}

@@ -57,7 +57,6 @@ export default function WhiteboardApp(): JSX.Element {
     moveStrokes,
     duplicateStrokes,
     changeStrokesColor,
-    addTextAnnotation,
     addShape,
     deleteShapes,
     moveShapes,
@@ -529,7 +528,6 @@ export default function WhiteboardApp(): JSX.Element {
               onMoveStrokes={moveStrokes}
               onDuplicateStrokes={duplicateStrokes}
               onChangeStrokesColor={changeStrokesColor}
-              onAddTextAnnotation={addTextAnnotation}
               onAddShape={addShape}
               onDeleteShapes={deleteShapes}
               onMoveShapes={moveShapes}

@@ -401,53 +401,53 @@ export const useNoteStore = create<NoteState>((set, get) => ({
         if (note.id !== noteId) return note;
 
         const filteredStrokes = note.strokes.filter((stroke) => !strokeIntersectsCircle(stroke, x, y, radius));
+        const filteredShapes = note.shapes.filter((shape) => !shapeIntersectsCircle(shape, x, y, radius));
 
-        // Filter out text annotations that intersect with the eraser
+        // Remove text annotations whose bounding box intersects the eraser circle.
         const filteredAnnotations = (note.textAnnotations ?? []).filter((annotation) => {
-          const lines = annotation.text.split('\n');
-          const textWidth = Math.max(...lines.map(line => line.length)) * annotation.fontSize * 0.6;
+          const lines = annotation.text.split("\n");
+          const textWidth = Math.max(...lines.map((line) => line.length)) * annotation.fontSize * 0.6;
           const lineHeight = annotation.fontSize * 1.1;
           const textHeight = lines.length * lineHeight;
           const closestX = Math.max(annotation.x, Math.min(x, annotation.x + textWidth));
           const closestY = Math.max(annotation.y, Math.min(y, annotation.y + textHeight));
           const distanceX = x - closestX;
           const distanceY = y - closestY;
-          return (distanceX * distanceX + distanceY * distanceY) > radius * radius;
+          return distanceX * distanceX + distanceY * distanceY > radius * radius;
         });
 
-        const filteredAnnotations = (note.textAnnotations ?? []).filter(
-          (annotation) => !erasedAnnotations.some((erased) => erased.id === annotation.id),
-        );
-        
-        // Filter out images that intersect with the eraser
-        const erasedImages = (note.images ?? []).filter((image) => {
-          // Check if eraser circle intersects with image bounding box
+        const filteredImages = (note.images ?? []).filter((image) => {
           const closestX = Math.max(image.x, Math.min(x, image.x + image.width));
           const closestY = Math.max(image.y, Math.min(y, image.y + image.height));
-          
           const distanceX = x - closestX;
           const distanceY = y - closestY;
-          const distanceSquared = distanceX * distanceX + distanceY * distanceY;
-          
-          return distanceSquared <= radius * radius;
+          return distanceX * distanceX + distanceY * distanceY > radius * radius;
         });
 
-        const filteredImages = (note.images ?? []).filter(
-          (image) => !erasedImages.some((erased) => erased.id === image.id),
-        );
-        
-        if (filteredStrokes.length === note.strokes.length && 
-            filteredAnnotations.length === (note.textAnnotations ?? []).length &&
-            filteredImages.length === (note.images ?? []).length) {
+        if (
+          filteredStrokes.length === note.strokes.length &&
+          filteredShapes.length === note.shapes.length &&
+          filteredAnnotations.length === (note.textAnnotations ?? []).length &&
+          filteredImages.length === (note.images ?? []).length
+        ) {
           return note;
         }
 
         const ts = now();
-        const afterState = { ...note, strokes: filteredStrokes, textAnnotations: filteredAnnotations, shapes: filteredShapes };
+        const afterState = {
+          ...note,
+          strokes: filteredStrokes,
+          shapes: filteredShapes,
+          textAnnotations: filteredAnnotations,
+          images: filteredImages,
+        };
         const lastAction = note.undoHistory[note.undoHistory.length - 1];
         const shouldMerge = lastAction?.label === "erase" && ts - lastAction.timestamp < ERASE_MERGE_WINDOW_MS;
 
         const action = makeHistoryAction("erase", note, afterState, shouldMerge ? lastAction : undefined);
+        const nextUndoHistory = shouldMerge
+          ? [...note.undoHistory.slice(0, -1), action]
+          : [...note.undoHistory, action];
 
         return {
           ...note,
