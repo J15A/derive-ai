@@ -44,12 +44,10 @@ app.use((err: Error, req: express.Request, res: express.Response, next: express.
 // Start server
 async function startServer() {
   try {
-    // Try to connect to MongoDB (non-blocking)
-    connectToDatabase(MONGODB_URI).catch((error) => {
-      console.error("⚠️  MongoDB connection failed, but server will continue:", error.message);
-    });
+    // Connect to MongoDB first
+    await connectToDatabase(MONGODB_URI);
     
-    // Start Express server regardless of MongoDB connection
+    // Start Express server after DB is connected
     app.listen(PORT, () => {
       console.log(`🚀 Server running on http://localhost:${PORT}`);
       console.log(`📝 API endpoint: http://localhost:${PORT}/api/notes`);

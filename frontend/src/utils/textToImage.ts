@@ -225,7 +225,8 @@ async function renderLatexToDataUrl(
     tempDiv.style.position = "absolute";
     tempDiv.style.left = "-9999px";
     tempDiv.style.fontSize = (displayMode ? fontSize * 1.3 : fontSize) + "px";
-    tempDiv.style.lineHeight = "1.2";
+    // Do NOT override lineHeight — KaTeX needs its own line-height calculations
+    // to correctly size stretchy delimiters (matrix brackets, tall parens, etc.)
     tempDiv.style.color = color;
     tempDiv.style.fontFamily = `${HANDWRITING_FONT}, KaTeX_Main, Times New Roman, serif`;
     document.body.appendChild(tempDiv);
@@ -236,6 +237,7 @@ async function renderLatexToDataUrl(
     const bbox = tempDiv.getBoundingClientRect();
     let minTop = bbox.top;
     let maxBottom = bbox.bottom;
+    let minLeft = bbox.left;
     let maxRight = bbox.right;
     const allEls = tempDiv.querySelectorAll("*");
     for (const child of allEls) {
@@ -243,12 +245,14 @@ async function renderLatexToDataUrl(
       if (cr.width === 0 && cr.height === 0) continue;
       if (cr.top < minTop) minTop = cr.top;
       if (cr.bottom > maxBottom) maxBottom = cr.bottom;
+      if (cr.left < minLeft) minLeft = cr.left;
       if (cr.right > maxRight) maxRight = cr.right;
     }
 
-    const width = Math.ceil(maxRight - bbox.left);
+    const width = Math.ceil(maxRight - minLeft);
     const height = Math.ceil(maxBottom - minTop);
     const overflowTop = Math.ceil(bbox.top - minTop);
+    const overflowLeft = Math.ceil(bbox.left - minLeft);
     if (width === 0 || height === 0) {
       document.body.removeChild(tempDiv);
       return null;
@@ -317,28 +321,58 @@ async function renderLatexToDataUrl(
     wrapper.setAttribute("xmlns", "http://www.w3.org/1999/xhtml");
     wrapper.style.width = width + padding * 2 + "px";
     wrapper.style.height = height + padding * 2 + "px";
-    wrapper.style.paddingLeft = padding + "px";
+    wrapper.style.paddingLeft = (padding + overflowLeft) + "px";
     wrapper.style.paddingRight = padding + "px";
     wrapper.style.paddingTop = (padding + overflowTop) + "px";
     wrapper.style.paddingBottom = padding + "px";
     wrapper.style.boxSizing = "border-box";
     wrapper.style.overflow = "visible";
 
-    // Clone the KaTeX DOM as-is — the embedded CSS will style it correctly
-    const clone = tempDiv.cloneNode(true) as HTMLElement;
-    clone.style.position = "static";
-    clone.style.left = "0";
-    clone.style.margin = "0";
-    clone.style.fontSize = (displayMode ? fontSize * 1.3 : fontSize) + "px";
-    clone.style.lineHeight = "1.2";
-    clone.style.color = color;
-    clone.style.fontFamily = `${HANDWRITING_FONT}, KaTeX_Main, Times New Roman, serif`;
-    wrapper.appendChild(clone);
+    // ── Use innerHTML string instead of cloneNode to avoid namespace issues ──
+    // KaTeX uses inline <svg> elements for stretchy delimiters (brackets, etc).
+    // When these HTML-namespaced SVG nodes are cloned and placed into an SVG
+    // foreignObject, XMLSerializer produces broken "ns0:" prefixed tags like
+    // <ns0:svg>, <ns0:path> which browsers silently refuse to render.
+    //
+    // By injecting the KaTeX HTML via innerHTML on an XHTML div inside the
+    // foreignObject, and then post-processing the serialized string to fix
+    // any remaining namespace prefix issues, we ensure the inner SVGs render.
+    const contentDiv = document.createElement("div");
+    contentDiv.style.fontSize = (displayMode ? fontSize * 1.3 : fontSize) + "px";
+    contentDiv.style.color = color;
+    contentDiv.style.fontFamily = `${HANDWRITING_FONT}, KaTeX_Main, Times New Roman, serif`;
+    contentDiv.innerHTML = html;
+    wrapper.appendChild(contentDiv);
 
     fo.appendChild(wrapper);
     svg.appendChild(fo);
 
-    const svgString = new XMLSerializer().serializeToString(svg);
+    let svgString = new XMLSerializer().serializeToString(svg);
+
+    // ── Fix broken SVG namespace prefixes ─────────────────────────────────
+    // XMLSerializer may emit "xmlns:nsN" declarations and prefix inner SVG
+    // element tag names (e.g. <ns0:svg>, <ns0:path>) when it encounters SVG
+    // elements inside an XHTML foreignObject context. These prefixed tags
+    // are invalid in the data-URL SVG rendering context and cause the
+    // stretchy delimiters (brackets, parens, integrals) to silently vanish.
+    //
+    // Fix: strip all auto-generated namespace prefixes so inner SVGs become
+    // plain <svg>, <path>, etc. with an explicit xmlns attribute.
+    svgString = svgString
+      // Remove ns0-nsN prefixes from opening tags: <ns0:svg -> <svg
+      .replace(/<ns\d+:/g, "<")
+      // Remove ns0-nsN prefixes from closing tags: </ns0:svg -> </svg
+      .replace(/<\/ns\d+:/g, "</")
+      // Remove the xmlns:nsN declarations themselves
+      .replace(/\s+xmlns:ns\d+="[^"]*"/g, "");
+
+    // Ensure every inner <svg> (inside foreignObject) has an explicit xmlns
+    // so the browser treats them as SVG, not XHTML.
+    svgString = svgString.replace(
+      /(<svg(?!\s[^>]*xmlns=)[^>]*)(>)/g,
+      `$1 xmlns="${svgNS}"$2`,
+    );
+
     const dataUrl = `data:image/svg+xml,${encodeURIComponent(svgString)
       .replace(/'/g, "%27")
       .replace(/"/g, "%22")}`;

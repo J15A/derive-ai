@@ -1,4 +1,6 @@
-export type InkTool = "pen" | "eraser" | "pan" | "selector" | "highlighter" | "text";
+export type InkTool = "pen" | "eraser" | "pan" | "selector" | "highlighter" | "text" | "shape";
+
+export type ShapeType = "rectangle" | "circle" | "line" | "arrow" | "triangle";
 
 export interface InkPoint {
   x: number;
@@ -16,18 +18,24 @@ export interface InkStroke {
 }
 
 export interface InkHistoryAction {
-  type:
-    | "addStroke"
-    | "erase"
-    | "addTextAnnotation"
-    | "addImage"
-    | "deleteImages"
-    | "transformImages";
-  strokes: InkStroke[];
-  textAnnotations?: TextAnnotation[];
-  images?: WhiteboardImage[];
-  beforeImages?: WhiteboardImage[];
-  afterImages?: WhiteboardImage[];
+  /** Human-readable label for the action (used only for debugging). */
+  label: string;
+  /** Full snapshot of strokes before this action. */
+  beforeStrokes: InkStroke[];
+  /** Full snapshot of strokes after this action. */
+  afterStrokes: InkStroke[];
+  /** Full snapshot of shapes before this action. */
+  beforeShapes: Shape[];
+  /** Full snapshot of shapes after this action. */
+  afterShapes: Shape[];
+  /** Full snapshot of text annotations before this action. */
+  beforeTextAnnotations: TextAnnotation[];
+  /** Full snapshot of text annotations after this action. */
+  afterTextAnnotations: TextAnnotation[];
+  /** Full snapshot of images before this action. */
+  beforeImages: WhiteboardImage[];
+  /** Full snapshot of images after this action. */
+  afterImages: WhiteboardImage[];
   timestamp: number;
 }
 
@@ -39,6 +47,18 @@ export interface WhiteboardImage {
   width: number;
   height: number;
   createdAt: number;
+}
+
+export interface Shape {
+  id: string;
+  type: ShapeType;
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  color: string;
+  strokeWidth: number;
+  filled: boolean;
 }
 
 export interface Selection {
@@ -82,6 +102,7 @@ export interface Note {
   text: string;
   chatMessages: ChatMessage[];
   strokes: InkStroke[];
+  shapes: Shape[];
   images: WhiteboardImage[];
   undoneStrokes: InkStroke[];
   textAnnotations: TextAnnotation[];

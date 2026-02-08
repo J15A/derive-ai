@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import type { ChatMessage, Note, NoteBundle, InkTool, TextAnnotation, WhiteboardImage } from "../types";
+import type { ChatMessage, Note, NoteBundle, InkTool, TextAnnotation, WhiteboardImage, ShapeType, Shape } from "../types";
 import { buildNoteBundle } from "../store/noteStore";
 import { strokesToPngDataUrl } from "../utils/ink";
 import { uid } from "../utils/ink";
@@ -14,7 +14,9 @@ const GRAPH_PANEL_VISIBILITY_KEY = "deriveAiGraphPanelVisible";
 interface NoteEditorProps {
   note: Note | null;
   tool: InkTool;
+  shapeType: ShapeType;
   color: string;
+  highlighterColor: string;
   penSize: number;
   highlighterSize: number;
   showGrid: boolean;
@@ -27,7 +29,9 @@ interface NoteEditorProps {
   isChatSending: boolean;
   chatError: string | null;
   onToolChange: (tool: InkTool) => void;
+  onShapeTypeChange: (shapeType: ShapeType) => void;
   onColorChange: (value: string) => void;
+  onHighlighterColorChange: (value: string) => void;
   onPenSizeChange: (value: number) => void;
   onHighlighterSizeChange: (value: number) => void;
   onShowGridChange: (value: boolean) => void;
@@ -39,6 +43,10 @@ interface NoteEditorProps {
   onDuplicateStrokes: (noteId: string, strokeIds: string[]) => string[];
   onChangeStrokesColor: (noteId: string, strokeIds: string[], newColor: string) => void;
   onAddTextAnnotation: (noteId: string, annotation: TextAnnotation) => void;
+  onAddShape: (noteId: string, shape: Shape) => void;
+  onDeleteShapes: (noteId: string, shapeIds: string[]) => void;
+  onMoveShapes: (noteId: string, shapeIds: string[], dx: number, dy: number) => void;
+  onScaleShapes: (noteId: string, shapeIds: string[], scale: number, centerX: number, centerY: number) => void;
   onAddImage: (noteId: string, image: WhiteboardImage) => void;
   onDeleteImages: (noteId: string, imageIds: string[]) => void;
   onMoveImages: (noteId: string, imageIds: string[], dx: number, dy: number) => void;
@@ -66,7 +74,9 @@ function download(name: string, content: string, mimeType: string): void {
 export function NoteEditor({
   note,
   tool,
+  shapeType,
   color,
+  highlighterColor,
   penSize,
   highlighterSize,
   showGrid,
@@ -79,7 +89,9 @@ export function NoteEditor({
   isChatSending,
   chatError,
   onToolChange,
+  onShapeTypeChange,
   onColorChange,
+  onHighlighterColorChange,
   onPenSizeChange,
   onHighlighterSizeChange,
   onShowGridChange,
@@ -87,6 +99,10 @@ export function NoteEditor({
   onAppendStroke,
   onEraseAt,
   onDeleteStrokes,
+  onAddShape,
+  onDeleteShapes,
+  onMoveShapes,
+  onScaleShapes,
   onAddImage,
   onDeleteImages,
   onMoveImages,
@@ -650,7 +666,9 @@ export function NoteEditor({
     <main className="flex h-full min-h-0 min-w-0 flex-col overflow-hidden rounded-2xl bg-panel shadow-soft" ref={rootRef}>
       <Toolbar
         tool={tool}
+        shapeType={shapeType}
         color={color}
+        highlighterColor={highlighterColor}
         penSize={penSize}
         highlighterSize={highlighterSize}
         showGrid={showGrid}
@@ -659,7 +677,9 @@ export function NoteEditor({
         isFullscreen={isFullscreen}
         zoomPercent={Math.round(safeNote.viewport.scale * 100)}
         onToolChange={onToolChange}
+        onShapeTypeChange={onShapeTypeChange}
         onColorChange={onColorChange}
+        onHighlighterColorChange={onHighlighterColorChange}
         onPenSizeChange={onPenSizeChange}
         onHighlighterSizeChange={onHighlighterSizeChange}
         onShowGridChange={onShowGridChange}
@@ -697,7 +717,9 @@ export function NoteEditor({
         <InkCanvas
           note={safeNote}
           tool={tool}
+          shapeType={shapeType}
           color={color}
+          highlighterColor={highlighterColor}
           penSize={penSize}
           highlighterSize={highlighterSize}
           showGrid={showGrid}
@@ -708,6 +730,10 @@ export function NoteEditor({
           onDuplicateStrokes={onDuplicateStrokes}
           onChangeStrokesColor={onChangeStrokesColor}
           onAddTextAnnotation={onAddTextAnnotation}
+          onAddShape={onAddShape}
+          onDeleteShapes={onDeleteShapes}
+          onMoveShapes={onMoveShapes}
+          onScaleShapes={onScaleShapes}
           onAddImage={onAddImage}
           onDeleteImages={onDeleteImages}
           onMoveImages={onMoveImages}

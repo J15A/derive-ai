@@ -7,9 +7,66 @@ import type {
   Note,
   NoteBundle,
   TextAnnotation,
-  WhiteboardImage,
+  WhiteboardImage, ShapeType, Shape,
 } from "../types";
 import { strokeIntersectsCircle, strokesToPngDataUrl, uid } from "../utils/ink";
+
+/** Check if a shape's edges intersect the eraser circle. */
+function shapeIntersectsCircle(shape: Shape, cx: number, cy: number, radius: number): boolean {
+  if (shape.type === "line" || shape.type === "arrow") {
+    // For line/arrow, check distance from point to the line segment
+    return pointToSegDist(cx, cy, shape.x, shape.y, shape.x + shape.width, shape.y + shape.height) <= radius + shape.strokeWidth * 0.5;
+  }
+  if (shape.type === "triangle") {
+    // Right triangle: right angle at (x, y+h)
+    const rightAngle = { x: shape.x, y: shape.y + shape.height };
+    const hLeg = { x: shape.x + shape.width, y: shape.y + shape.height };
+    const vLeg = { x: shape.x, y: shape.y };
+    const half = shape.strokeWidth * 0.5;
+    return (
+      pointToSegDist(cx, cy, rightAngle.x, rightAngle.y, hLeg.x, hLeg.y) <= radius + half ||
+      pointToSegDist(cx, cy, hLeg.x, hLeg.y, vLeg.x, vLeg.y) <= radius + half ||
+      pointToSegDist(cx, cy, vLeg.x, vLeg.y, rightAngle.x, rightAngle.y) <= radius + half
+    );
+  }
+  if (shape.type === "circle") {
+    // Ellipse: check if the eraser point is near the ellipse boundary
+    const ecx = shape.x + shape.width / 2;
+    const ecy = shape.y + shape.height / 2;
+    const rx = Math.abs(shape.width) / 2;
+    const ry = Math.abs(shape.height) / 2;
+    if (rx < 0.01 || ry < 0.01) return false;
+    // Normalized distance from center
+    const dx = cx - ecx;
+    const dy = cy - ecy;
+    const normDist = Math.sqrt((dx * dx) / (rx * rx) + (dy * dy) / (ry * ry));
+    // The eraser hits if the point is near the boundary (normDist ≈ 1)
+    const approxR = Math.sqrt(rx * ry); // geometric mean for tolerance
+    const tol = (radius + shape.strokeWidth * 0.5) / approxR;
+    return Math.abs(normDist - 1) < tol;
+  }
+  // Rectangle: check the 4 edges
+  const x0 = shape.x, y0 = shape.y;
+  const x1 = shape.x + shape.width, y1 = shape.y + shape.height;
+  const half = shape.strokeWidth * 0.5;
+  return (
+    pointToSegDist(cx, cy, x0, y0, x1, y0) <= radius + half ||
+    pointToSegDist(cx, cy, x1, y0, x1, y1) <= radius + half ||
+    pointToSegDist(cx, cy, x1, y1, x0, y1) <= radius + half ||
+    pointToSegDist(cx, cy, x0, y1, x0, y0) <= radius + half
+  );
+}
+
+/** Point-to-segment distance. */
+function pointToSegDist(px: number, py: number, ax: number, ay: number, bx: number, by: number): number {
+  const abx = bx - ax;
+  const aby = by - ay;
+  const lenSq = abx * abx + aby * aby;
+  if (lenSq === 0) return Math.hypot(px - ax, py - ay);
+  let t = ((px - ax) * abx + (py - ay) * aby) / lenSq;
+  t = Math.max(0, Math.min(1, t));
+  return Math.hypot(px - (ax + t * abx), py - (ay + t * aby));
+}
 
 const now = () => Date.now();
 
@@ -22,6 +79,7 @@ function createNote(title = "Untitled Note"): Note {
     chatMessages: [],
     strokes: [],
     images: [],
+    shapes: [],
     undoneStrokes: [],
     textAnnotations: [],
     undoHistory: [],
@@ -38,7 +96,9 @@ interface NoteState {
   searchQuery: string;
   activeTab: "ink" | "text";
   tool: InkTool;
+  shapeType: ShapeType;
   color: string;
+  highlighterColor: string;
   penSize: number;
   highlighterSize: number;
   showGrid: boolean;
@@ -61,7 +121,9 @@ interface NoteState {
   removeChatMessage: (noteId: string, messageId: string) => void;
   clearChatMessages: (noteId: string) => void;
   setTool: (tool: InkTool) => void;
+  setShapeType: (shapeType: ShapeType) => void;
   setColor: (color: string) => void;
+  setHighlighterColor: (color: string) => void;
   setPenSize: (size: number) => void;
   setHighlighterSize: (size: number) => void;
   setShowGrid: (show: boolean) => void;
@@ -73,7 +135,11 @@ interface NoteState {
   duplicateStrokes: (noteId: string, strokeIds: string[]) => string[];
   changeStrokesColor: (noteId: string, strokeIds: string[], newColor: string) => void;
   addTextAnnotation: (noteId: string, annotation: TextAnnotation) => void;
+  addShape: (noteId: string, shape: Shape) => void;
   addImage: (noteId: string, image: WhiteboardImage) => void;
+  deleteShapes: (noteId: string, shapeIds: string[]) => void;
+  moveShapes: (noteId: string, shapeIds: string[], dx: number, dy: number) => void;
+  scaleShapes: (noteId: string, shapeIds: string[], scale: number, centerX: number, centerY: number) => void;
   deleteImages: (noteId: string, imageIds: string[]) => void;
   moveImages: (noteId: string, imageIds: string[], dx: number, dy: number) => void;
   scaleStrokes: (noteId: string, strokeIds: string[], scale: number, centerX: number, centerY: number) => void;
@@ -89,33 +155,32 @@ interface NoteState {
 
 const MIN_ZOOM = 0.25;
 const MAX_ZOOM = 6;
-const IMAGE_TRANSFORM_MERGE_WINDOW_MS = 250;
+const ERASE_MERGE_WINDOW_MS = 250;
+const TRANSFORM_MERGE_WINDOW_MS = 250;
 
-function sameImageIdSet(a: WhiteboardImage[] | undefined, b: WhiteboardImage[] | undefined): boolean {
-  if (!a || !b || a.length !== b.length) {
-    return false;
-  }
-  const ids = new Set(a.map((image) => image.id));
-  return b.every((image) => ids.has(image.id));
-}
-
-function applyImageSnapshot(images: WhiteboardImage[], snapshot: WhiteboardImage[] | undefined): WhiteboardImage[] {
-  if (!snapshot || snapshot.length === 0) {
-    return images;
-  }
-  const imageMap = new Map(snapshot.map((image) => [image.id, image]));
-  return images.map((image) => imageMap.get(image.id) ?? image);
-}
-
-function appendMissingImages(images: WhiteboardImage[], additions: WhiteboardImage[] | undefined): WhiteboardImage[] {
-  if (!additions || additions.length === 0) {
-    return images;
-  }
-  const existingIds = new Set(images.map((image) => image.id));
-  return [
-    ...images,
-    ...additions.filter((image) => !existingIds.has(image.id)),
-  ];
+/**
+ * Build a history entry that snapshots before/after state of all drawable collections.
+ * If `mergeWith` is provided the before-snapshot is taken from that earlier action
+ * (useful for merging rapid-fire eraser / drag events into one undo step).
+ */
+function makeHistoryAction(
+  label: string,
+  before: Pick<Note, "strokes" | "shapes" | "textAnnotations" | "images">,
+  after: Pick<Note, "strokes" | "shapes" | "textAnnotations" | "images">,
+  mergeWith?: InkHistoryAction,
+): InkHistoryAction {
+  return {
+    label,
+    beforeStrokes: mergeWith ? mergeWith.beforeStrokes : before.strokes,
+    afterStrokes: after.strokes,
+    beforeShapes: mergeWith ? mergeWith.beforeShapes : before.shapes,
+    afterShapes: after.shapes,
+    beforeTextAnnotations: mergeWith ? mergeWith.beforeTextAnnotations : before.textAnnotations,
+    afterTextAnnotations: after.textAnnotations,
+    beforeImages: mergeWith ? mergeWith.beforeImages : before.images,
+    afterImages: after.images,
+    timestamp: now(),
+  };
 }
 
 export const useNoteStore = create<NoteState>((set, get) => ({
@@ -124,7 +189,9 @@ export const useNoteStore = create<NoteState>((set, get) => ({
   searchQuery: "",
   activeTab: "ink",
   tool: "pen",
+  shapeType: "rectangle",
   color: "#111827",
+  highlighterColor: "#FFEB3B",
   penSize: 6,
   highlighterSize: 16,
   showGrid: false,
@@ -134,6 +201,7 @@ export const useNoteStore = create<NoteState>((set, get) => ({
   setNotes: (notes) => {
     const normalized = notes.map((note) => ({
       ...note,
+      shapes: note.shapes ?? [],
       text: note.text ?? "",
       chatMessages: note.chatMessages ?? [],
       strokes: note.strokes ?? [],
@@ -304,117 +372,77 @@ export const useNoteStore = create<NoteState>((set, get) => ({
     }));
   },
   setTool: (tool) => set({ tool }),
+  setShapeType: (shapeType) => set({ shapeType }),
   setColor: (color) => set({ color }),
+  setHighlighterColor: (color) => set({ highlighterColor: color }),
   setPenSize: (size) => set({ penSize: size }),
   setHighlighterSize: (size) => set({ highlighterSize: size }),
   setShowGrid: (show) => set({ showGrid: show }),
   setShowTextPanel: (show) => set({ showTextPanel: show }),
   appendStroke: (noteId, stroke) => {
-    const actionTimestamp = now();
-    const historyAction: InkHistoryAction = {
-      type: "addStroke",
-      strokes: [stroke],
-      timestamp: actionTimestamp,
-    };
     set((state) => ({
-      notes: state.notes.map((note) =>
-        note.id === noteId
-          ? {
-              ...note,
-              strokes: [...note.strokes, stroke],
-              undoneStrokes: [],
-              undoHistory: [...(note.undoHistory ?? []), historyAction],
-              redoHistory: [],
-              updatedAt: now(),
-            }
-          : note,
-      ),
+      notes: state.notes.map((note) => {
+        if (note.id !== noteId) return note;
+        const nextStrokes = [...note.strokes, stroke];
+        const action = makeHistoryAction("addStroke", note, { ...note, strokes: nextStrokes });
+        return {
+          ...note,
+          strokes: nextStrokes,
+          undoHistory: [...note.undoHistory, action],
+          redoHistory: [],
+          updatedAt: now(),
+        };
+      }),
     }));
   },
   eraseAt: (noteId, x, y, radius) => {
     set((state) => ({
       notes: state.notes.map((note) => {
-        if (note.id !== noteId) {
-          return note;
-        }
-        
-        const erasedStrokes = note.strokes.filter((stroke) => strokeIntersectsCircle(stroke, x, y, radius));
+        if (note.id !== noteId) return note;
+
         const filteredStrokes = note.strokes.filter((stroke) => !strokeIntersectsCircle(stroke, x, y, radius));
-        
+
         // Filter out text annotations that intersect with the eraser
-        const erasedAnnotations = (note.textAnnotations ?? []).filter((annotation) => {
-          // Check if eraser circle intersects with text annotation bounding box
-          // Account for multiline text
+        const filteredAnnotations = (note.textAnnotations ?? []).filter((annotation) => {
           const lines = annotation.text.split('\n');
-          const textWidth = Math.max(...lines.map(line => line.length)) * annotation.fontSize * 0.6; // Rough estimate
-          const lineHeight = annotation.fontSize * 1.1; // Match rendering line height
+          const textWidth = Math.max(...lines.map(line => line.length)) * annotation.fontSize * 0.6;
+          const lineHeight = annotation.fontSize * 1.1;
           const textHeight = lines.length * lineHeight;
-          
-          // Find closest point on the rectangle to the circle center
           const closestX = Math.max(annotation.x, Math.min(x, annotation.x + textWidth));
           const closestY = Math.max(annotation.y, Math.min(y, annotation.y + textHeight));
-          
-          // Calculate distance between circle center and closest point
           const distanceX = x - closestX;
           const distanceY = y - closestY;
-          const distanceSquared = distanceX * distanceX + distanceY * distanceY;
-          
-          return distanceSquared <= radius * radius;
+          return (distanceX * distanceX + distanceY * distanceY) > radius * radius;
         });
 
-        const filteredAnnotations = (note.textAnnotations ?? []).filter(
-          (annotation) => !erasedAnnotations.some((erased) => erased.id === annotation.id),
-        );
-        
-        if (filteredStrokes.length === note.strokes.length && 
-            filteredAnnotations.length === (note.textAnnotations ?? []).length) {
+        // Filter out shapes that intersect with the eraser
+        const filteredShapes = note.shapes.filter((shape) => {
+          return !shapeIntersectsCircle(shape, x, y, radius);
+        });
+
+        if (filteredStrokes.length === note.strokes.length &&
+            filteredAnnotations.length === (note.textAnnotations ?? []).length &&
+            filteredShapes.length === note.shapes.length) {
           return note;
         }
-        
-        const actionTimestamp = now();
-        const lastAction = note.undoHistory[note.undoHistory.length - 1];
-        const shouldMergeWithPreviousErase =
-          lastAction?.type === "erase" && actionTimestamp - lastAction.timestamp < 250;
 
-        const nextUndoHistory: InkHistoryAction[] = shouldMergeWithPreviousErase
-          ? [
-              ...note.undoHistory.slice(0, -1),
-              {
-                type: "erase" as const,
-                strokes: [
-                  ...lastAction.strokes,
-                  ...erasedStrokes.filter(
-                    (stroke) => !lastAction.strokes.some((existing) => existing.id === stroke.id),
-                  ),
-                ],
-                textAnnotations: [
-                  ...(lastAction.textAnnotations ?? []),
-                  ...erasedAnnotations.filter(
-                    (annotation) =>
-                      !(lastAction.textAnnotations ?? []).some((existing) => existing.id === annotation.id),
-                  ),
-                ],
-                timestamp: actionTimestamp,
-              },
-            ]
-          : [
-              ...note.undoHistory,
-              {
-                type: "erase" as const,
-                strokes: erasedStrokes,
-                textAnnotations: erasedAnnotations,
-                timestamp: actionTimestamp,
-              },
-            ];
+        const ts = now();
+        const afterState = { ...note, strokes: filteredStrokes, textAnnotations: filteredAnnotations, shapes: filteredShapes };
+        const lastAction = note.undoHistory[note.undoHistory.length - 1];
+        const shouldMerge = lastAction?.label === "erase" && ts - lastAction.timestamp < ERASE_MERGE_WINDOW_MS;
+
+        const action = makeHistoryAction("erase", note, afterState, shouldMerge ? lastAction : undefined);
 
         return {
           ...note,
           strokes: filteredStrokes,
+          shapes: filteredShapes,
           textAnnotations: filteredAnnotations,
-          undoneStrokes: [],
-          undoHistory: nextUndoHistory,
+          undoHistory: shouldMerge
+            ? [...note.undoHistory.slice(0, -1), action]
+            : [...note.undoHistory, action],
           redoHistory: [],
-          updatedAt: actionTimestamp,
+          updatedAt: ts,
         };
       }),
     }));
@@ -422,17 +450,15 @@ export const useNoteStore = create<NoteState>((set, get) => ({
   deleteStrokes: (noteId, strokeIds) => {
     set((state) => ({
       notes: state.notes.map((note) => {
-        if (note.id !== noteId) {
-          return note;
-        }
+        if (note.id !== noteId) return note;
         const filtered = note.strokes.filter((stroke) => !strokeIds.includes(stroke.id));
-        if (filtered.length === note.strokes.length) {
-          return note;
-        }
+        if (filtered.length === note.strokes.length) return note;
+        const action = makeHistoryAction("deleteStrokes", note, { ...note, strokes: filtered });
         return {
           ...note,
           strokes: filtered,
-          undoneStrokes: [],
+          undoHistory: [...note.undoHistory, action],
+          redoHistory: [],
           updatedAt: now(),
         };
       }),
@@ -441,165 +467,206 @@ export const useNoteStore = create<NoteState>((set, get) => ({
   moveStrokes: (noteId, strokeIds, dx, dy) => {
     set((state) => ({
       notes: state.notes.map((note) => {
-        if (note.id !== noteId) {
-          return note;
-        }
+        if (note.id !== noteId || (dx === 0 && dy === 0)) return note;
+        const nextStrokes = note.strokes.map((stroke) => {
+          if (!strokeIds.includes(stroke.id)) return stroke;
+          return { ...stroke, points: stroke.points.map((p) => ({ ...p, x: p.x + dx, y: p.y + dy })) };
+        });
+        const ts = now();
+        const afterState = { ...note, strokes: nextStrokes };
+        const lastAction = note.undoHistory[note.undoHistory.length - 1];
+        const shouldMerge = lastAction?.label === "moveStrokes" && ts - lastAction.timestamp < TRANSFORM_MERGE_WINDOW_MS;
+        const action = makeHistoryAction("moveStrokes", note, afterState, shouldMerge ? lastAction : undefined);
         return {
           ...note,
-          strokes: note.strokes.map((stroke) => {
-            if (!strokeIds.includes(stroke.id)) {
-              return stroke;
-            }
-            return {
-              ...stroke,
-              points: stroke.points.map((p) => ({
-                ...p,
-                x: p.x + dx,
-                y: p.y + dy,
-              })),
-            };
-          }),
-          undoneStrokes: [],
-          updatedAt: now(),
+          strokes: nextStrokes,
+          undoHistory: shouldMerge
+            ? [...note.undoHistory.slice(0, -1), action]
+            : [...note.undoHistory, action],
+          redoHistory: [],
+          updatedAt: ts,
         };
       }),
     }));
   },
   duplicateStrokes: (noteId, strokeIds) => {
     const newIds: string[] = [];
-    
     set((state) => ({
       notes: state.notes.map((note) => {
-        if (note.id !== noteId) {
-          return note;
-        }
+        if (note.id !== noteId) return note;
         const duplicates = note.strokes
           .filter((stroke) => strokeIds.includes(stroke.id))
           .map((stroke) => {
             const newId = uid();
             newIds.push(newId);
-            return {
-              ...stroke,
-              id: newId,
-              points: stroke.points.map((p) => ({
-                ...p,
-                x: p.x + 20, // Offset duplicates slightly
-                y: p.y + 20,
-              })),
-            };
+            return { ...stroke, id: newId, points: stroke.points.map((p) => ({ ...p, x: p.x + 20, y: p.y + 20 })) };
           });
-        const actionTimestamp = now();
-        const historyAction: InkHistoryAction = {
-          type: "addStroke",
-          strokes: duplicates,
-          timestamp: actionTimestamp,
-        };
+        const nextStrokes = [...note.strokes, ...duplicates];
+        const action = makeHistoryAction("duplicateStrokes", note, { ...note, strokes: nextStrokes });
         return {
           ...note,
-          strokes: [...note.strokes, ...duplicates],
-          undoneStrokes: [],
-          undoHistory: [...(note.undoHistory ?? []), historyAction],
+          strokes: nextStrokes,
+          undoHistory: [...note.undoHistory, action],
           redoHistory: [],
-          updatedAt: actionTimestamp,
+          updatedAt: now(),
         };
       }),
     }));
-    
     return newIds;
   },
   changeStrokesColor: (noteId, strokeIds, newColor) => {
     set((state) => ({
       notes: state.notes.map((note) => {
-        if (note.id !== noteId) {
-          return note;
-        }
+        if (note.id !== noteId) return note;
+        const nextStrokes = note.strokes.map((stroke) =>
+          strokeIds.includes(stroke.id) ? { ...stroke, color: newColor } : stroke,
+        );
+        const action = makeHistoryAction("changeStrokesColor", note, { ...note, strokes: nextStrokes });
         return {
           ...note,
-          strokes: note.strokes.map((stroke) => {
-            if (!strokeIds.includes(stroke.id)) {
-              return stroke;
-            }
-            return {
-              ...stroke,
-              color: newColor,
-            };
-          }),
-          undoneStrokes: [],
+          strokes: nextStrokes,
+          undoHistory: [...note.undoHistory, action],
+          redoHistory: [],
           updatedAt: now(),
         };
       }),
     }));
   },
   addTextAnnotation: (noteId, annotation) => {
-    const actionTimestamp = now();
-    const historyAction: InkHistoryAction = {
-      type: "addTextAnnotation",
-      strokes: [],
-      textAnnotations: [annotation],
-      timestamp: actionTimestamp,
-    };
     set((state) => ({
-      notes: state.notes.map((note) =>
-        note.id === noteId
-          ? {
-              ...note,
-              textAnnotations: [...(note.textAnnotations ?? []), annotation],
-              undoHistory: [...(note.undoHistory ?? []), historyAction],
-              redoHistory: [],
-              updatedAt: actionTimestamp,
-            }
-          : note,
-      ),
+      notes: state.notes.map((note) => {
+        if (note.id !== noteId) return note;
+        const nextAnnotations = [...(note.textAnnotations ?? []), annotation];
+        const action = makeHistoryAction("addTextAnnotation", note, { ...note, textAnnotations: nextAnnotations });
+        return {
+          ...note,
+          textAnnotations: nextAnnotations,
+          undoHistory: [...note.undoHistory, action],
+          redoHistory: [],
+          updatedAt: now(),
+        };
+      }),
     }));
   },
   addImage: (noteId, image) => {
-    const actionTimestamp = now();
-    const historyAction: InkHistoryAction = {
-      type: "addImage",
-      strokes: [],
-      images: [image],
-      timestamp: actionTimestamp,
-    };
     set((state) => ({
-      notes: state.notes.map((note) =>
-        note.id === noteId
-          ? {
-              ...note,
-              images: [...note.images, image],
-              undoHistory: [...(note.undoHistory ?? []), historyAction],
-              redoHistory: [],
-              updatedAt: actionTimestamp,
-            }
-          : note,
-      ),
+      notes: state.notes.map((note) => {
+        if (note.id !== noteId) return note;
+        const nextImages = [...note.images, image];
+        const action = makeHistoryAction("addImage", note, { ...note, images: nextImages });
+        return {
+          ...note,
+          images: nextImages,
+          undoHistory: [...note.undoHistory, action],
+          redoHistory: [],
+          updatedAt: now(),
+        };
+      }),
+    }));
+  },
+  addShape: (noteId, shape) => {
+    set((state) => ({
+      notes: state.notes.map((note) => {
+        if (note.id !== noteId) return note;
+        const nextShapes = [...note.shapes, shape];
+        const action = makeHistoryAction("addShape", note, { ...note, shapes: nextShapes });
+        return {
+          ...note,
+          shapes: nextShapes,
+          undoHistory: [...note.undoHistory, action],
+          redoHistory: [],
+          updatedAt: now(),
+        };
+      }),
+    }));
+  },
+  deleteShapes: (noteId, shapeIds) => {
+    set((state) => ({
+      notes: state.notes.map((note) => {
+        if (note.id !== noteId) return note;
+        const nextShapes = note.shapes.filter((shape) => !shapeIds.includes(shape.id));
+        if (nextShapes.length === note.shapes.length) return note;
+        const action = makeHistoryAction("deleteShapes", note, { ...note, shapes: nextShapes });
+        return {
+          ...note,
+          shapes: nextShapes,
+          undoHistory: [...note.undoHistory, action],
+          redoHistory: [],
+          updatedAt: now(),
+        };
+      }),
+    }));
+  },
+  moveShapes: (noteId, shapeIds, dx, dy) => {
+    set((state) => ({
+      notes: state.notes.map((note) => {
+        if (note.id !== noteId || (dx === 0 && dy === 0)) return note;
+        const nextShapes = note.shapes.map((shape) =>
+          shapeIds.includes(shape.id) ? { ...shape, x: shape.x + dx, y: shape.y + dy } : shape,
+        );
+        const ts = now();
+        const afterState = { ...note, shapes: nextShapes };
+        const lastAction = note.undoHistory[note.undoHistory.length - 1];
+        const shouldMerge = lastAction?.label === "moveShapes" && ts - lastAction.timestamp < TRANSFORM_MERGE_WINDOW_MS;
+        const action = makeHistoryAction("moveShapes", note, afterState, shouldMerge ? lastAction : undefined);
+        return {
+          ...note,
+          shapes: nextShapes,
+          undoHistory: shouldMerge
+            ? [...note.undoHistory.slice(0, -1), action]
+            : [...note.undoHistory, action],
+          redoHistory: [],
+          updatedAt: ts,
+        };
+      }),
+    }));
+  },
+  scaleShapes: (noteId, shapeIds, scale, centerX, centerY) => {
+    set((state) => ({
+      notes: state.notes.map((note) => {
+        if (note.id !== noteId || scale === 1) return note;
+        const nextShapes = note.shapes.map((shape) =>
+          shapeIds.includes(shape.id)
+            ? {
+                ...shape,
+                x: centerX + (shape.x - centerX) * scale,
+                y: centerY + (shape.y - centerY) * scale,
+                width: shape.width * scale,
+                height: shape.height * scale,
+                strokeWidth: shape.strokeWidth * scale,
+              }
+            : shape,
+        );
+        const ts = now();
+        const afterState = { ...note, shapes: nextShapes };
+        const lastAction = note.undoHistory[note.undoHistory.length - 1];
+        const shouldMerge = lastAction?.label === "scaleShapes" && ts - lastAction.timestamp < TRANSFORM_MERGE_WINDOW_MS;
+        const action = makeHistoryAction("scaleShapes", note, afterState, shouldMerge ? lastAction : undefined);
+        return {
+          ...note,
+          shapes: nextShapes,
+          undoHistory: shouldMerge
+            ? [...note.undoHistory.slice(0, -1), action]
+            : [...note.undoHistory, action],
+          redoHistory: [],
+          updatedAt: ts,
+        };
+      }),
     }));
   },
   deleteImages: (noteId, imageIds) => {
     set((state) => ({
       notes: state.notes.map((note) => {
-        if (note.id !== noteId) {
-          return note;
-        }
-
-        const deletedImages = note.images.filter((image) => imageIds.includes(image.id));
-        if (deletedImages.length === 0) {
-          return note;
-        }
-
-        const actionTimestamp = now();
-        const historyAction: InkHistoryAction = {
-          type: "deleteImages",
-          strokes: [],
-          images: deletedImages,
-          timestamp: actionTimestamp,
-        };
-
+        if (note.id !== noteId) return note;
+        const nextImages = note.images.filter((image) => !imageIds.includes(image.id));
+        if (nextImages.length === note.images.length) return note;
+        const action = makeHistoryAction("deleteImages", note, { ...note, images: nextImages });
         return {
           ...note,
-          images: note.images.filter((image) => !imageIds.includes(image.id)),
-          undoHistory: [...(note.undoHistory ?? []), historyAction],
+          images: nextImages,
+          undoHistory: [...note.undoHistory, action],
           redoHistory: [],
-          updatedAt: actionTimestamp,
+          updatedAt: now(),
         };
       }),
     }));
@@ -607,139 +674,89 @@ export const useNoteStore = create<NoteState>((set, get) => ({
   moveImages: (noteId, imageIds, dx, dy) => {
     set((state) => ({
       notes: state.notes.map((note) => {
-        if (note.id !== noteId || (dx === 0 && dy === 0)) {
-          return note;
-        }
-
-        const beforeImages = note.images.filter((image) => imageIds.includes(image.id));
-        if (beforeImages.length === 0) {
-          return note;
-        }
-
-        const actionTimestamp = now();
-        const movedMap = new Map(
-          beforeImages.map((image) => [image.id, { ...image, x: image.x + dx, y: image.y + dy }]),
+        if (note.id !== noteId || (dx === 0 && dy === 0)) return note;
+        const nextImages = note.images.map((image) =>
+          imageIds.includes(image.id) ? { ...image, x: image.x + dx, y: image.y + dy } : image,
         );
-        const nextImages = note.images.map((image) => movedMap.get(image.id) ?? image);
-        const afterImages = nextImages.filter((image) => imageIds.includes(image.id));
-
+        const ts = now();
+        const afterState = { ...note, images: nextImages };
         const lastAction = note.undoHistory[note.undoHistory.length - 1];
-        const shouldMerge =
-          lastAction?.type === "transformImages"
-          && actionTimestamp - lastAction.timestamp < IMAGE_TRANSFORM_MERGE_WINDOW_MS
-          && sameImageIdSet(lastAction.afterImages, beforeImages);
-
-        const historyAction: InkHistoryAction = shouldMerge
-          ? {
-              type: "transformImages",
-              strokes: [],
-              beforeImages: lastAction.beforeImages ?? beforeImages,
-              afterImages,
-              timestamp: actionTimestamp,
-            }
-          : {
-              type: "transformImages",
-              strokes: [],
-              beforeImages,
-              afterImages,
-              timestamp: actionTimestamp,
-            };
-
+        const shouldMerge = lastAction?.label === "moveImages" && ts - lastAction.timestamp < TRANSFORM_MERGE_WINDOW_MS;
+        const action = makeHistoryAction("moveImages", note, afterState, shouldMerge ? lastAction : undefined);
         return {
           ...note,
           images: nextImages,
           undoHistory: shouldMerge
-            ? [...note.undoHistory.slice(0, -1), historyAction]
-            : [...note.undoHistory, historyAction],
+            ? [...note.undoHistory.slice(0, -1), action]
+            : [...note.undoHistory, action],
           redoHistory: [],
-          updatedAt: actionTimestamp,
+          updatedAt: ts,
         };
       }),
     }));
   },
   scaleStrokes: (noteId, strokeIds, scale, centerX, centerY) => {
     set((state) => ({
-      notes: state.notes.map((note) =>
-        note.id === noteId
-          ? {
-              ...note,
-              strokes: note.strokes.map((stroke) =>
-                strokeIds.includes(stroke.id)
-                  ? {
-                      ...stroke,
-                      points: stroke.points.map((p) => ({
-                        ...p,
-                        x: centerX + (p.x - centerX) * scale,
-                        y: centerY + (p.y - centerY) * scale,
-                      })),
-                      baseSize: stroke.baseSize * scale,
-                    }
-                  : stroke,
-              ),
-              updatedAt: now(),
-            }
-          : note,
-      ),
+      notes: state.notes.map((note) => {
+        if (note.id !== noteId) return note;
+        const nextStrokes = note.strokes.map((stroke) =>
+          strokeIds.includes(stroke.id)
+            ? {
+                ...stroke,
+                points: stroke.points.map((p) => ({
+                  ...p,
+                  x: centerX + (p.x - centerX) * scale,
+                  y: centerY + (p.y - centerY) * scale,
+                })),
+                baseSize: stroke.baseSize * scale,
+              }
+            : stroke,
+        );
+        const ts = now();
+        const afterState = { ...note, strokes: nextStrokes };
+        const lastAction = note.undoHistory[note.undoHistory.length - 1];
+        const shouldMerge = lastAction?.label === "scaleStrokes" && ts - lastAction.timestamp < TRANSFORM_MERGE_WINDOW_MS;
+        const action = makeHistoryAction("scaleStrokes", note, afterState, shouldMerge ? lastAction : undefined);
+        return {
+          ...note,
+          strokes: nextStrokes,
+          undoHistory: shouldMerge
+            ? [...note.undoHistory.slice(0, -1), action]
+            : [...note.undoHistory, action],
+          redoHistory: [],
+          updatedAt: ts,
+        };
+      }),
     }));
   },
   scaleImages: (noteId, imageIds, scale, centerX, centerY) => {
     set((state) => ({
       notes: state.notes.map((note) => {
-        if (note.id !== noteId || scale === 1) {
-          return note;
-        }
-
-        const beforeImages = note.images.filter((image) => imageIds.includes(image.id));
-        if (beforeImages.length === 0) {
-          return note;
-        }
-
-        const actionTimestamp = now();
-        const scaledMap = new Map(
-          beforeImages.map((image) => [
-            image.id,
-            {
-              ...image,
-              x: centerX + (image.x - centerX) * scale,
-              y: centerY + (image.y - centerY) * scale,
-              width: image.width * scale,
-              height: image.height * scale,
-            },
-          ]),
+        if (note.id !== noteId || scale === 1) return note;
+        const nextImages = note.images.map((image) =>
+          imageIds.includes(image.id)
+            ? {
+                ...image,
+                x: centerX + (image.x - centerX) * scale,
+                y: centerY + (image.y - centerY) * scale,
+                width: image.width * scale,
+                height: image.height * scale,
+              }
+            : image,
         );
-        const nextImages = note.images.map((image) => scaledMap.get(image.id) ?? image);
-        const afterImages = nextImages.filter((image) => imageIds.includes(image.id));
-
+        const ts = now();
+        const afterState = { ...note, images: nextImages };
         const lastAction = note.undoHistory[note.undoHistory.length - 1];
-        const shouldMerge =
-          lastAction?.type === "transformImages"
-          && actionTimestamp - lastAction.timestamp < IMAGE_TRANSFORM_MERGE_WINDOW_MS
-          && sameImageIdSet(lastAction.afterImages, beforeImages);
-
-        const historyAction: InkHistoryAction = shouldMerge
-          ? {
-              type: "transformImages",
-              strokes: [],
-              beforeImages: lastAction.beforeImages ?? beforeImages,
-              afterImages,
-              timestamp: actionTimestamp,
-            }
-          : {
-              type: "transformImages",
-              strokes: [],
-              beforeImages,
-              afterImages,
-              timestamp: actionTimestamp,
-            };
-
+        const shouldMerge = lastAction?.label === "scaleImages" && ts - lastAction.timestamp < TRANSFORM_MERGE_WINDOW_MS;
+        const action = makeHistoryAction("scaleImages", note, afterState, shouldMerge ? lastAction : undefined);
         return {
           ...note,
           images: nextImages,
           undoHistory: shouldMerge
-            ? [...note.undoHistory.slice(0, -1), historyAction]
-            : [...note.undoHistory, historyAction],
+            ? [...note.undoHistory.slice(0, -1), action]
+            : [...note.undoHistory, action],
           redoHistory: [],
-          updatedAt: actionTimestamp,
+          updatedAt: ts,
         };
       }),
     }));
@@ -757,37 +774,13 @@ export const useNoteStore = create<NoteState>((set, get) => ({
         }
 
         const action = undoHistory[undoHistory.length - 1];
-        let nextStrokes = note.strokes;
-        let nextAnnotations = note.textAnnotations ?? [];
-        let nextImages = note.images;
-
-        if (action.type === "addStroke") {
-          const actionStrokeIds = new Set(action.strokes.map((stroke) => stroke.id));
-          nextStrokes = note.strokes.filter((stroke) => !actionStrokeIds.has(stroke.id));
-        } else if (action.type === "addTextAnnotation") {
-          const addedAnnotationIds = new Set((action.textAnnotations ?? []).map((annotation) => annotation.id));
-          nextAnnotations = (note.textAnnotations ?? []).filter(
-            (annotation) => !addedAnnotationIds.has(annotation.id),
-          );
-        } else if (action.type === "erase") {
-          nextStrokes = [...note.strokes, ...action.strokes];
-          const erasedAnnotations = action.textAnnotations ?? [];
-          nextAnnotations = [...(note.textAnnotations ?? []), ...erasedAnnotations];
-        } else if (action.type === "addImage") {
-          const addedImageIds = new Set((action.images ?? []).map((image) => image.id));
-          nextImages = note.images.filter((image) => !addedImageIds.has(image.id));
-        } else if (action.type === "deleteImages") {
-          nextImages = appendMissingImages(note.images, action.images);
-        } else if (action.type === "transformImages") {
-          nextImages = applyImageSnapshot(note.images, action.beforeImages);
-        }
 
         return {
           ...note,
-          strokes: nextStrokes,
-          textAnnotations: nextAnnotations,
-          images: nextImages,
-          undoneStrokes: [],
+          strokes: action.beforeStrokes,
+          shapes: action.beforeShapes,
+          textAnnotations: action.beforeTextAnnotations,
+          images: action.beforeImages,
           undoHistory: undoHistory.slice(0, -1),
           redoHistory: [...(note.redoHistory ?? []), action],
           updatedAt: now(),
@@ -808,37 +801,13 @@ export const useNoteStore = create<NoteState>((set, get) => ({
         }
 
         const action = redoHistory[redoHistory.length - 1];
-        let nextStrokes = note.strokes;
-        let nextAnnotations = note.textAnnotations ?? [];
-        let nextImages = note.images;
-
-        if (action.type === "addStroke") {
-          nextStrokes = [...note.strokes, ...action.strokes];
-        } else if (action.type === "addTextAnnotation") {
-          nextAnnotations = [...(note.textAnnotations ?? []), ...(action.textAnnotations ?? [])];
-        } else if (action.type === "erase") {
-          const erasedStrokeIds = new Set(action.strokes.map((stroke) => stroke.id));
-          nextStrokes = note.strokes.filter((stroke) => !erasedStrokeIds.has(stroke.id));
-
-          const erasedAnnotationIds = new Set((action.textAnnotations ?? []).map((annotation) => annotation.id));
-          nextAnnotations = (note.textAnnotations ?? []).filter(
-            (annotation) => !erasedAnnotationIds.has(annotation.id),
-          );
-        } else if (action.type === "addImage") {
-          nextImages = appendMissingImages(note.images, action.images);
-        } else if (action.type === "deleteImages") {
-          const deletedImageIds = new Set((action.images ?? []).map((image) => image.id));
-          nextImages = note.images.filter((image) => !deletedImageIds.has(image.id));
-        } else if (action.type === "transformImages") {
-          nextImages = applyImageSnapshot(note.images, action.afterImages);
-        }
 
         return {
           ...note,
-          strokes: nextStrokes,
-          textAnnotations: nextAnnotations,
-          images: nextImages,
-          undoneStrokes: [],
+          strokes: action.afterStrokes,
+          shapes: action.afterShapes,
+          textAnnotations: action.afterTextAnnotations,
+          images: action.afterImages,
           undoHistory: [...(note.undoHistory ?? []), action],
           redoHistory: redoHistory.slice(0, -1),
           updatedAt: now(),
@@ -852,19 +821,22 @@ export const useNoteStore = create<NoteState>((set, get) => ({
       return;
     }
     set((state) => ({
-      notes: state.notes.map((note) =>
-        note.id === selectedId
-          ? {
-              ...note,
-              strokes: [],
-              textAnnotations: [],
-              undoneStrokes: [],
-              undoHistory: [],
-              redoHistory: [],
-              updatedAt: now(),
-            }
-          : note,
-      ),
+      notes: state.notes.map((note) => {
+        if (note.id !== selectedId) return note;
+        // Only push history if there is anything to clear
+        const hasContent = note.strokes.length > 0 || note.shapes.length > 0 ||
+          (note.textAnnotations ?? []).length > 0 || note.images.length > 0;
+        if (!hasContent) return note;
+        const emptyState = { strokes: [] as typeof note.strokes, shapes: [] as typeof note.shapes, textAnnotations: [] as typeof note.textAnnotations, images: [] as typeof note.images };
+        const action = makeHistoryAction("clearAll", note, { ...note, ...emptyState });
+        return {
+          ...note,
+          ...emptyState,
+          undoHistory: [...note.undoHistory, action],
+          redoHistory: [],
+          updatedAt: now(),
+        };
+      }),
     }));
   },
   panViewport: (noteId, dx, dy) => {
@@ -926,6 +898,7 @@ export const useNoteStore = create<NoteState>((set, get) => ({
       text: bundle.note.text || "",
       chatMessages: [],
       strokes: bundle.note.strokes || [],
+      shapes: [],
       images: bundle.note.images || [],
       undoneStrokes: [],
       textAnnotations: [],

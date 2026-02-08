@@ -22,7 +22,9 @@ export default function WhiteboardApp(): JSX.Element {
     selectedNoteId,
     searchQuery,
     tool,
+    shapeType,
     color,
+    highlighterColor,
     penSize,
     highlighterSize,
     showGrid,
@@ -42,7 +44,9 @@ export default function WhiteboardApp(): JSX.Element {
     updateChatMessageContent,
     clearChatMessages,
     setTool,
+    setShapeType,
     setColor,
+    setHighlighterColor,
     setPenSize,
     setHighlighterSize,
     setShowGrid,
@@ -54,6 +58,10 @@ export default function WhiteboardApp(): JSX.Element {
     duplicateStrokes,
     changeStrokesColor,
     addTextAnnotation,
+    addShape,
+    deleteShapes,
+    moveShapes,
+    scaleShapes,
     addImage,
     deleteImages,
     moveImages,
@@ -219,6 +227,7 @@ export default function WhiteboardApp(): JSX.Element {
       const parsed = JSON.parse(raw) as Partial<{
         tool: "pen" | "eraser" | "pan" | "selector" | "highlighter";
         color: string;
+        highlighterColor: string;
         penSize: number;
         highlighterSize: number;
         showGrid: boolean;
@@ -230,6 +239,9 @@ export default function WhiteboardApp(): JSX.Element {
       }
       if (typeof parsed.color === "string") {
         setColor(parsed.color);
+      }
+      if (typeof parsed.highlighterColor === "string") {
+        setHighlighterColor(parsed.highlighterColor);
       }
       if (typeof parsed.penSize === "number") {
         setPenSize(Math.min(24, Math.max(1, parsed.penSize)));
@@ -248,7 +260,7 @@ export default function WhiteboardApp(): JSX.Element {
     } finally {
       setUiSettingsReady(true);
     }
-  }, [setColor, setShowGrid, setShowTextPanel, setPenSize, setHighlighterSize, setTool]);
+  }, [setColor, setHighlighterColor, setShowGrid, setShowTextPanel, setPenSize, setHighlighterSize, setTool]);
 
   useEffect(() => {
     if (!uiSettingsReady) {
@@ -259,13 +271,14 @@ export default function WhiteboardApp(): JSX.Element {
       JSON.stringify({
         tool,
         color,
+        highlighterColor,
         penSize,
         highlighterSize,
         showGrid,
         showTextPanel,
       }),
     );
-  }, [color, showGrid, showTextPanel, penSize, highlighterSize, tool, uiSettingsReady]);
+  }, [color, highlighterColor, showGrid, showTextPanel, penSize, highlighterSize, tool, uiSettingsReady]);
 
   useEffect(() => {
     let cancelled = false;
@@ -478,7 +491,9 @@ export default function WhiteboardApp(): JSX.Element {
             <NoteEditor
               note={selectedNote}
               tool={tool}
+              shapeType={shapeType}
               color={color}
+              highlighterColor={highlighterColor}
               penSize={penSize}
               highlighterSize={highlighterSize}
               showGrid={showGrid}
@@ -501,7 +516,9 @@ export default function WhiteboardApp(): JSX.Element {
               isChatSending={isChatSending}
               chatError={chatError}
               onToolChange={setTool}
+              onShapeTypeChange={setShapeType}
               onColorChange={setColor}
+              onHighlighterColorChange={setHighlighterColor}
               onPenSizeChange={setPenSize}
               onHighlighterSizeChange={setHighlighterSize}
               onShowGridChange={setShowGrid}
@@ -513,6 +530,10 @@ export default function WhiteboardApp(): JSX.Element {
               onDuplicateStrokes={duplicateStrokes}
               onChangeStrokesColor={changeStrokesColor}
               onAddTextAnnotation={addTextAnnotation}
+              onAddShape={addShape}
+              onDeleteShapes={deleteShapes}
+              onMoveShapes={moveShapes}
+              onScaleShapes={scaleShapes}
               onAddImage={addImage}
               onDeleteImages={deleteImages}
               onMoveImages={moveImages}

@@ -1,5 +1,5 @@
 import { useEffect, useRef } from "react";
-import type { InkTool } from "../types";
+import type { InkTool, ShapeType } from "../types";
 import { 
   Bot,
   Pen, 
@@ -21,13 +21,20 @@ import {
   Upload,
   ImageUp,
   TextCursor,
-  LineChart
+  LineChart,
+  Square,
+  Circle,
+  Minus,
+  MoveUpRight,
+  Triangle
 } from "lucide-react";
 import { useState } from "react";
 
 interface ToolbarProps {
   tool: InkTool;
+  shapeType: ShapeType;
   color: string;
+  highlighterColor: string;
   penSize: number;
   highlighterSize: number;
   showGrid: boolean;
@@ -36,7 +43,9 @@ interface ToolbarProps {
   isFullscreen: boolean;
   zoomPercent: number;
   onToolChange: (tool: InkTool) => void;
+  onShapeTypeChange: (shapeType: ShapeType) => void;
   onColorChange: (value: string) => void;
+  onHighlighterColorChange: (value: string) => void;
   onPenSizeChange: (value: number) => void;
   onHighlighterSizeChange: (value: number) => void;
   onShowGridChange: (value: boolean) => void;
@@ -76,6 +85,7 @@ const PEN_COLORS = [
 export function Toolbar({
   tool,
   color,
+  shapeType,
   penSize,
   highlighterSize,
   showGrid,
@@ -84,7 +94,11 @@ export function Toolbar({
   isFullscreen,
   zoomPercent,
   onToolChange,
+  onShapeTypeChange,
+  color: penColorProp,
+  highlighterColor: highlighterColorProp,
   onColorChange,
+  onHighlighterColorChange,
   onPenSizeChange,
   onHighlighterSizeChange,
   onShowGridChange,
@@ -105,8 +119,9 @@ export function Toolbar({
   const settingsRef = useRef<HTMLDetailsElement | null>(null);
   const [showPenMenu, setShowPenMenu] = useState(false);
   const [showHighlighterMenu, setShowHighlighterMenu] = useState(false);
-  const [penColor, setPenColor] = useState("#111827");
-  const [highlighterColor, setHighlighterColor] = useState(HIGHLIGHTER_COLORS[0].value);
+  const [showShapeMenu, setShowShapeMenu] = useState(false);
+  const [penColor, setPenColor] = useState(penColorProp);
+  const [highlighterColor, setHighlighterColor] = useState(highlighterColorProp);
 
   useEffect(() => {
     if (tool === "pen") {
@@ -144,7 +159,7 @@ export function Toolbar({
   const neutralToolActiveClass = "bg-white shadow-[inset_0_0_0_2px_#cbd5e1] hover:bg-slate-50";
   const toolButton = (name: InkTool, icon: JSX.Element) => (
     <button
-      className={`tool-btn ${tool === name ? (name === "eraser" || name === "pan" || name === "selector" ? neutralToolActiveClass : "tool-btn-active") : ""}`}
+      className={`tool-btn ${tool === name ? (name === "eraser" || name === "pan" || name === "selector" || name === "text" || name === "shape" ? neutralToolActiveClass : "tool-btn-active") : ""}`}
       type="button"
       onClick={() => onToolChange(name)}
       title={name.charAt(0).toUpperCase() + name.slice(1)}
@@ -161,7 +176,7 @@ export function Toolbar({
 
   const handleHighlighterColorSelect = (newColor: string) => {
     setHighlighterColor(newColor);
-    onColorChange(newColor);
+    onHighlighterColorChange(newColor);
     onToolChange("highlighter");
   };
 
@@ -232,7 +247,7 @@ export function Toolbar({
             className={`tool-btn ${tool === "highlighter" ? coloredToolActiveClass : ""}`}
             type="button"
             onClick={() => {
-              onColorChange(highlighterColor);
+              onHighlighterColorChange(highlighterColor);
               onToolChange("highlighter");
             }}
             title="Highlighter"
@@ -279,6 +294,92 @@ export function Toolbar({
         {toolButton("pan", <Hand size={20} />)}
         {toolButton("selector", <SquareDashedMousePointer size={20} />)}
         {toolButton("text", <TextCursor size={20} />)}
+        
+        {/* Shapes with dropdown */}
+        <div
+          className="relative"
+          onMouseEnter={() => setShowShapeMenu(true)}
+          onMouseLeave={() => setShowShapeMenu(false)}
+        >
+          <button
+            className={`tool-btn ${tool === "shape" ? neutralToolActiveClass : ""}`}
+            type="button"
+            onClick={() => onToolChange("shape")}
+            title="Shapes"
+          >
+            <Square size={20} />
+          </button>
+
+          {showShapeMenu && (
+            <div className="absolute left-0 top-10 z-[120] flex gap-1 rounded-lg border border-slate-200 bg-white p-2 shadow-lg max-sm:fixed max-sm:left-3 max-sm:right-3 max-sm:top-[4.5rem]">
+              <button
+                className={`flex h-10 w-10 items-center justify-center rounded-lg transition-colors ${
+                  shapeType === "rectangle" ? "bg-slate-100 ring-2 ring-slate-300" : "hover:bg-slate-50"
+                }`}
+                onClick={() => {
+                  onShapeTypeChange("rectangle");
+                  onToolChange("shape");
+                }}
+                type="button"
+                title="Rectangle"
+              >
+                <Square size={20} />
+              </button>
+              <button
+                className={`flex h-10 w-10 items-center justify-center rounded-lg transition-colors ${
+                  shapeType === "circle" ? "bg-slate-100 ring-2 ring-slate-300" : "hover:bg-slate-50"
+                }`}
+                onClick={() => {
+                  onShapeTypeChange("circle");
+                  onToolChange("shape");
+                }}
+                type="button"
+                title="Circle"
+              >
+                <Circle size={20} />
+              </button>
+              <button
+                className={`flex h-10 w-10 items-center justify-center rounded-lg transition-colors ${
+                  shapeType === "line" ? "bg-slate-100 ring-2 ring-slate-300" : "hover:bg-slate-50"
+                }`}
+                onClick={() => {
+                  onShapeTypeChange("line");
+                  onToolChange("shape");
+                }}
+                type="button"
+                title="Line"
+              >
+                <Minus size={20} />
+              </button>
+              <button
+                className={`flex h-10 w-10 items-center justify-center rounded-lg transition-colors ${
+                  shapeType === "arrow" ? "bg-slate-100 ring-2 ring-slate-300" : "hover:bg-slate-50"
+                }`}
+                onClick={() => {
+                  onShapeTypeChange("arrow");
+                  onToolChange("shape");
+                }}
+                type="button"
+                title="Arrow"
+              >
+                <MoveUpRight size={20} />
+              </button>
+              <button
+                className={`flex h-10 w-10 items-center justify-center rounded-lg transition-colors ${
+                  shapeType === "triangle" ? "bg-slate-100 ring-2 ring-slate-300" : "hover:bg-slate-50"
+                }`}
+                onClick={() => {
+                  onShapeTypeChange("triangle");
+                  onToolChange("shape");
+                }}
+                type="button"
+                title="Right Triangle"
+              >
+                <Triangle size={20} />
+              </button>
+            </div>
+          )}
+        </div>
         
         <button 
           className="tool-btn"

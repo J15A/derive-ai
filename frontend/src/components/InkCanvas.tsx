@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import type { InkPoint, InkStroke, InkTool, Note, TextAnnotation, WhiteboardImage } from "../types";
+import type { InkPoint, InkStroke, InkTool, Note, TextAnnotation, WhiteboardImage, ShapeType, Shape } from "../types";
 import { drawStrokePolygon, strokePolygon, strokesToPngDataUrl, uid } from "../utils/ink";
 import { solveEquation, recognizeEquationForGraph } from "../api/client";
 import { SelectionPopup } from "./SelectionPopup";
@@ -8,7 +8,9 @@ import { textToImage } from "../utils/textToImage";
 interface InkCanvasProps {
   note: Note;
   tool: InkTool;
+  shapeType: ShapeType;
   color: string;
+  highlighterColor: string;
   penSize: number;
   highlighterSize: number;
   showGrid: boolean;
@@ -19,6 +21,10 @@ interface InkCanvasProps {
   onDuplicateStrokes: (noteId: string, strokeIds: string[]) => string[];
   onChangeStrokesColor: (noteId: string, strokeIds: string[], newColor: string) => void;
   onAddTextAnnotation: (noteId: string, annotation: TextAnnotation) => void;
+  onAddShape: (noteId: string, shape: Shape) => void;
+  onDeleteShapes: (noteId: string, shapeIds: string[]) => void;
+  onMoveShapes: (noteId: string, shapeIds: string[], dx: number, dy: number) => void;
+  onScaleShapes: (noteId: string, shapeIds: string[], scale: number, centerX: number, centerY: number) => void;
   onAddImage: (noteId: string, image: WhiteboardImage) => void;
   onDeleteImages: (noteId: string, imageIds: string[]) => void;
   onMoveImages: (noteId: string, imageIds: string[], dx: number, dy: number) => void;
@@ -37,7 +43,9 @@ const INSERT_TEXT_COLOR = "#000000";
 export function InkCanvas({
   note,
   tool,
+  shapeType,
   color,
+  highlighterColor,
   penSize,
   highlighterSize,
   showGrid,
@@ -49,9 +57,13 @@ export function InkCanvas({
   onMoveImages,
   onScaleStrokes,
   onScaleImages,
+  onDeleteShapes,
+  onMoveShapes,
+  onScaleShapes,
   onDuplicateStrokes,
   onChangeStrokesColor,
   onAddTextAnnotation,
+  onAddShape,
   onAddImage,
   onPanViewport,
   onZoomViewportAt,
@@ -72,6 +84,7 @@ export function InkCanvas({
   const [selectionBox, setSelectionBox] = useState<{ startX: number; startY: number; endX: number; endY: number } | null>(null);
   const [selectedStrokes, setSelectedStrokes] = useState<string[]>([]);
   const [selectedImages, setSelectedImages] = useState<string[]>([]);
+  const [selectedShapes, setSelectedShapes] = useState<string[]>([]);
   const [isDraggingSelection, setIsDraggingSelection] = useState(false);
   const [isResizing, setIsResizing] = useState(false);
   const [resizeHandle, setResizeHandle] = useState<string | null>(null);
@@ -85,6 +98,7 @@ export function InkCanvas({
   const [isExplaining, setIsExplaining] = useState(false);
   const [textInput, setTextInput] = useState<{ x: number; y: number; worldX: number; worldY: number } | null>(null);
   const [textValue, setTextValue] = useState("");
+  const [tempShape, setTempShape] = useState<{ startX: number; startY: number; endX: number; endY: number } | null>(null);
   const [loadedImages, setLoadedImages] = useState<Map<string, HTMLImageElement>>(new Map());
 
   const drawScene = useCallback(() => {
@@ -193,8 +207,153 @@ export function InkCanvas({
       }
     }
 
-    // Draw single bounding box for all selected strokes and images
-    if ((selectedStrokes.length > 0 || selectedImages.length > 0) && tool === "selector") {
+    // Draw shapes
+    for (const shape of note.shapes) {
+      ctx.strokeStyle = shape.color;
+      ctx.lineWidth = shape.strokeWidth;
+      ctx.fillStyle = shape.color;
+
+      if (shape.type === "rectangle") {
+        if (shape.filled) {
+          ctx.fillRect(shape.x, shape.y, shape.width, shape.height);
+        } else {
+          ctx.strokeRect(shape.x, shape.y, shape.width, shape.height);
+        }
+      } else if (shape.type === "circle") {
+        const centerX = shape.x + shape.width / 2;
+        const centerY = shape.y + shape.height / 2;
+        const radiusX = shape.width / 2;
+        const radiusY = shape.height / 2;
+        
+        ctx.beginPath();
+        ctx.ellipse(centerX, centerY, radiusX, radiusY, 0, 0, Math.PI * 2);
+        if (shape.filled) {
+          ctx.fill();
+        } else {
+          ctx.stroke();
+        }
+      } else if (shape.type === "line") {
+        ctx.beginPath();
+        ctx.moveTo(shape.x, shape.y);
+        ctx.lineTo(shape.x + shape.width, shape.y + shape.height);
+        ctx.stroke();
+      } else if (shape.type === "arrow") {
+        const startX = shape.x;
+        const startY = shape.y;
+        const endX = shape.x + shape.width;
+        const endY = shape.y + shape.height;
+        const angle = Math.atan2(endY - startY, endX - startX);
+        const headLen = Math.max(14, shape.strokeWidth * 4) / note.viewport.scale;
+
+        // Shorten line so it stops at the base of the arrowhead
+        const lineEndX = endX - headLen * Math.cos(angle) * 0.6;
+        const lineEndY = endY - headLen * Math.sin(angle) * 0.6;
+        ctx.beginPath();
+        ctx.moveTo(startX, startY);
+        ctx.lineTo(lineEndX, lineEndY);
+        ctx.stroke();
+
+        // Draw filled arrowhead
+        ctx.beginPath();
+        ctx.moveTo(endX, endY);
+        ctx.lineTo(
+          endX - headLen * Math.cos(angle - Math.PI / 6),
+          endY - headLen * Math.sin(angle - Math.PI / 6)
+        );
+        ctx.lineTo(
+          endX - headLen * Math.cos(angle + Math.PI / 6),
+          endY - headLen * Math.sin(angle + Math.PI / 6)
+        );
+        ctx.closePath();
+        ctx.fill();
+      } else if (shape.type === "triangle") {
+        // Right triangle: right angle at (x, y+h), with vertices adapting to sign of w/h
+        const x0 = shape.x;
+        const y0 = shape.y;
+        const x1 = shape.x + shape.width;
+        const y1 = shape.y + shape.height;
+        ctx.beginPath();
+        ctx.moveTo(x0, y1);        // right angle vertex
+        ctx.lineTo(x1, y1);        // horizontal leg end
+        ctx.lineTo(x0, y0);        // vertical leg end
+        ctx.closePath();
+        if (shape.filled) {
+          ctx.fill();
+        } else {
+          ctx.stroke();
+        }
+      }
+    }
+
+    // Draw temporary shape being drawn
+    if (tool === "shape" && tempShape) {
+      const x = Math.min(tempShape.startX, tempShape.endX);
+      const y = Math.min(tempShape.startY, tempShape.endY);
+      const width = Math.abs(tempShape.endX - tempShape.startX);
+      const height = Math.abs(tempShape.endY - tempShape.startY);
+
+      ctx.strokeStyle = color;
+      ctx.lineWidth = penSize;
+      ctx.fillStyle = color;
+
+      if (shapeType === "rectangle") {
+        ctx.strokeRect(x, y, width, height);
+      } else if (shapeType === "circle") {
+        const centerX = x + width / 2;
+        const centerY = y + height / 2;
+        const radiusX = width / 2;
+        const radiusY = height / 2;
+        
+        ctx.beginPath();
+        ctx.ellipse(centerX, centerY, radiusX, radiusY, 0, 0, Math.PI * 2);
+        ctx.stroke();
+      } else if (shapeType === "line") {
+        ctx.beginPath();
+        ctx.moveTo(tempShape.startX, tempShape.startY);
+        ctx.lineTo(tempShape.endX, tempShape.endY);
+        ctx.stroke();
+      } else if (shapeType === "arrow") {
+        const startX = tempShape.startX;
+        const startY = tempShape.startY;
+        const endX = tempShape.endX;
+        const endY = tempShape.endY;
+        const angle = Math.atan2(endY - startY, endX - startX);
+        const headLen = Math.max(14, penSize * 4) / note.viewport.scale;
+
+        // Shorten line so it stops at the base of the arrowhead
+        const lineEndX = endX - headLen * Math.cos(angle) * 0.6;
+        const lineEndY = endY - headLen * Math.sin(angle) * 0.6;
+        ctx.beginPath();
+        ctx.moveTo(startX, startY);
+        ctx.lineTo(lineEndX, lineEndY);
+        ctx.stroke();
+
+        // Draw filled arrowhead
+        ctx.beginPath();
+        ctx.moveTo(endX, endY);
+        ctx.lineTo(
+          endX - headLen * Math.cos(angle - Math.PI / 6),
+          endY - headLen * Math.sin(angle - Math.PI / 6)
+        );
+        ctx.lineTo(
+          endX - headLen * Math.cos(angle + Math.PI / 6),
+          endY - headLen * Math.sin(angle + Math.PI / 6)
+        );
+        ctx.closePath();
+        ctx.fill();
+      } else if (shapeType === "triangle") {
+        // Right triangle: right angle at (startX, endY)
+        ctx.beginPath();
+        ctx.moveTo(tempShape.startX, tempShape.endY);   // right angle vertex
+        ctx.lineTo(tempShape.endX, tempShape.endY);     // horizontal leg end
+        ctx.lineTo(tempShape.startX, tempShape.startY); // vertical leg end
+        ctx.closePath();
+        ctx.stroke();
+      }
+    }
+
+    // Draw single bounding box for all selected strokes, images, and shapes
+    if ((selectedStrokes.length > 0 || selectedImages.length > 0 || selectedShapes.length > 0) && tool === "selector") {
       let minX = Infinity;
       let minY = Infinity;
       let maxX = -Infinity;
@@ -220,6 +379,19 @@ export function InkCanvas({
           minY = Math.min(minY, image.y);
           maxX = Math.max(maxX, image.x + image.width);
           maxY = Math.max(maxY, image.y + image.height);
+        }
+      }
+
+      for (const shape of note.shapes) {
+        if (selectedShapes.includes(shape.id)) {
+          const sx = Math.min(shape.x, shape.x + shape.width);
+          const sy = Math.min(shape.y, shape.y + shape.height);
+          const sx2 = Math.max(shape.x, shape.x + shape.width);
+          const sy2 = Math.max(shape.y, shape.y + shape.height);
+          minX = Math.min(minX, sx);
+          minY = Math.min(minY, sy);
+          maxX = Math.max(maxX, sx2);
+          maxY = Math.max(maxY, sy2);
         }
       }
 
@@ -258,7 +430,7 @@ export function InkCanvas({
       ctx.globalAlpha = tool === "highlighter" ? 0.4 : 1;
       ctx.beginPath();
       ctx.arc(point.x, point.y, radius, 0, Math.PI * 2);
-      ctx.fillStyle = color;
+      ctx.fillStyle = tool === "highlighter" ? highlighterColor : color;
       ctx.fill();
       ctx.restore();
     } else if (currentPointsRef.current.length > 1 && (tool === "pen" || tool === "highlighter")) {
@@ -266,7 +438,7 @@ export function InkCanvas({
       const tempStroke: InkStroke = {
         id: "temp",
         tool: tool === "highlighter" ? "highlighter" : "pen",
-        color,
+        color: tool === "highlighter" ? highlighterColor : color,
         baseSize: currentSize,
         points: currentPointsRef.current,
       };
@@ -319,7 +491,9 @@ export function InkCanvas({
     ctx.restore();
   }, [
     color,
+    highlighterColor,
     note.strokes,
+    note.shapes,
     note.images,
     note.viewport.offsetX,
     note.viewport.offsetY,
@@ -328,8 +502,11 @@ export function InkCanvas({
     penSize,
     highlighterSize,
     tool,
+    shapeType,
+    tempShape,
     selectedStrokes,
     selectedImages,
+    selectedShapes,
     selectionBox,
     eraserTrail,
     loadedImages,
@@ -382,7 +559,7 @@ export function InkCanvas({
 
   useEffect(() => {
     scheduleDraw();
-  }, [note, tool, penSize, highlighterSize, color, scheduleDraw]);
+  }, [note, tool, shapeType, tempShape, penSize, highlighterSize, color, highlighterColor, scheduleDraw]);
 
   // Load images when they change
   useEffect(() => {
@@ -417,9 +594,10 @@ export function InkCanvas({
 
   useEffect(() => {
     // Clear selection when switching away from selector tool
-    if (tool !== "selector" && (selectedStrokes.length > 0 || selectedImages.length > 0)) {
+    if (tool !== "selector" && (selectedStrokes.length > 0 || selectedImages.length > 0 || selectedShapes.length > 0)) {
       setSelectedStrokes([]);
       setSelectedImages([]);
+      setSelectedShapes([]);
       setSelectionBox(null);
       setShowPopup(false);
       setIsResizing(false);
@@ -431,12 +609,12 @@ export function InkCanvas({
     if (tool !== "eraser") {
       setEraserTrail([]);
     }
-  }, [tool, selectedStrokes.length, selectedImages.length]);
+  }, [tool, selectedStrokes.length, selectedImages.length, selectedShapes.length]);
 
   // Show popup below selection when strokes or images are selected
   useEffect(() => {
-    if ((selectedStrokes.length > 0 || selectedImages.length > 0) && tool === "selector" && !isDraggingSelection) {
-      // Calculate bounding box of selected strokes and images in world space
+    if ((selectedStrokes.length > 0 || selectedImages.length > 0 || selectedShapes.length > 0) && tool === "selector" && !isDraggingSelection) {
+      // Calculate bounding box of selected strokes, images, and shapes in world space
       let minX = Infinity;
       let minY = Infinity;
       let maxX = -Infinity;
@@ -465,6 +643,19 @@ export function InkCanvas({
         }
       }
 
+      for (const shape of note.shapes) {
+        if (selectedShapes.includes(shape.id)) {
+          const sx = Math.min(shape.x, shape.x + shape.width);
+          const sy = Math.min(shape.y, shape.y + shape.height);
+          const sx2 = Math.max(shape.x, shape.x + shape.width);
+          const sy2 = Math.max(shape.y, shape.y + shape.height);
+          minX = Math.min(minX, sx);
+          minY = Math.min(minY, sy);
+          maxX = Math.max(maxX, sx2);
+          maxY = Math.max(maxY, sy2);
+        }
+      }
+
       if (minX !== Infinity && maxX !== -Infinity) {
         // Convert world coordinates to canvas/screen coordinates
         const canvas = canvasRef.current;
@@ -488,7 +679,7 @@ export function InkCanvas({
     } else {
       setShowPopup(false);
     }
-  }, [selectedStrokes, tool, note.strokes, note.viewport, isDraggingSelection]);
+  }, [selectedStrokes, selectedImages, selectedShapes, tool, note.strokes, note.shapes, note.images, note.viewport, isDraggingSelection]);
 
   useEffect(() => {
     if (!onExportReady) {
@@ -586,7 +777,7 @@ export function InkCanvas({
     const stroke: InkStroke = {
       id: uid(),
       tool: tool === "pen" || tool === "highlighter" ? tool : "pen",
-      color,
+      color: tool === "highlighter" ? highlighterColor : color,
       baseSize: currentSize,
       points: [...currentPointsRef.current],
     };
@@ -594,7 +785,7 @@ export function InkCanvas({
     onAppendStroke(note.id, stroke);
     currentPointsRef.current = [];
     scheduleDraw();
-  }, [color, note.id, onAppendStroke, scheduleDraw, tool, penSize, highlighterSize]);
+  }, [color, highlighterColor, note.id, onAppendStroke, scheduleDraw, tool, penSize, highlighterSize]);
 
   const eraserRadius = useMemo(() => {
     const currentSize = tool === "highlighter" ? highlighterSize : penSize;
@@ -609,8 +800,8 @@ export function InkCanvas({
 
     e.preventDefault();
 
-    // Allow panning with middle mouse button for any tool
-    const shouldPan = e.button === 1 || tool === "pan";
+    // Allow panning with right mouse button for any tool
+    const shouldPan = e.button === 2 || tool === "pan";
 
     if (shouldPan) {
       panPointerId.current = e.pointerId;
@@ -637,11 +828,20 @@ export function InkCanvas({
       return;
     }
 
+    if (tool === "shape") {
+      const point = toWorldPoint(e.clientX, e.clientY);
+      setTempShape({ startX: point.x, startY: point.y, endX: point.x, endY: point.y });
+      isDrawingRef.current = true;
+      drawingPointerId.current = e.pointerId;
+      canvas.setPointerCapture(e.pointerId);
+      return;
+    }
+
     if (tool === "selector") {
       const point = toWorldPoint(e.clientX, e.clientY);
 
       // First check if clicking on a resize handle
-      if (selectedStrokes.length > 0 || selectedImages.length > 0) {
+      if (selectedStrokes.length > 0 || selectedImages.length > 0 || selectedShapes.length > 0) {
         let minX = Infinity;
         let minY = Infinity;
         let maxX = -Infinity;
@@ -667,6 +867,19 @@ export function InkCanvas({
             minY = Math.min(minY, image.y);
             maxX = Math.max(maxX, image.x + image.width);
             maxY = Math.max(maxY, image.y + image.height);
+          }
+        }
+
+        for (const shape of note.shapes) {
+          if (selectedShapes.includes(shape.id)) {
+            const sx = Math.min(shape.x, shape.x + shape.width);
+            const sy = Math.min(shape.y, shape.y + shape.height);
+            const sx2 = Math.max(shape.x, shape.x + shape.width);
+            const sy2 = Math.max(shape.y, shape.y + shape.height);
+            minX = Math.min(minX, sx);
+            minY = Math.min(minY, sy);
+            maxX = Math.max(maxX, sx2);
+            maxY = Math.max(maxY, sy2);
           }
         }
 
@@ -704,6 +917,16 @@ export function InkCanvas({
         return point.x >= image.x && point.x <= image.x + image.width && point.y >= image.y && point.y <= image.y + image.height;
       });
 
+      // Check if clicking on a selected shape
+      const clickedShape = note.shapes.find((shape) => {
+        if (!selectedShapes.includes(shape.id)) return false;
+        const sx = Math.min(shape.x, shape.x + shape.width);
+        const sy = Math.min(shape.y, shape.y + shape.height);
+        const sx2 = Math.max(shape.x, shape.x + shape.width);
+        const sy2 = Math.max(shape.y, shape.y + shape.height);
+        return point.x >= sx - 5 && point.x <= sx2 + 5 && point.y >= sy - 5 && point.y <= sy2 + 5;
+      });
+
       // Then check if clicking on selected strokes
       const clickedStroke = note.strokes.find((stroke) => {
         if (!selectedStrokes.includes(stroke.id)) return false;
@@ -720,7 +943,7 @@ export function InkCanvas({
         return point.x >= minX - 5 && point.x <= maxX + 5 && point.y >= minY - 5 && point.y <= maxY + 5;
       });
 
-      if (clickedImage || clickedStroke) {
+      if (clickedImage || clickedStroke || clickedShape) {
         setIsDraggingSelection(true);
         setDragOffset({ x: point.x, y: point.y });
         drawingPointerId.current = e.pointerId;
@@ -783,6 +1006,17 @@ export function InkCanvas({
       return;
     }
 
+    if (tool === "shape" && tempShape) {
+      const point = toWorldPoint(e.clientX, e.clientY);
+      setTempShape({
+        ...tempShape,
+        endX: point.x,
+        endY: point.y,
+      });
+      scheduleDraw();
+      return;
+    }
+
     if (tool === "selector") {
       const point = toWorldPoint(e.clientX, e.clientY);
 
@@ -821,6 +1055,7 @@ export function InkCanvas({
 
         onScaleStrokes(note.id, selectedStrokes, scale, centerX, centerY);
         onScaleImages(note.id, selectedImages, scale, centerX, centerY);
+        onScaleShapes(note.id, selectedShapes, scale, centerX, centerY);
 
         // Update resize start for next frame
         setResizeStart({
@@ -839,6 +1074,7 @@ export function InkCanvas({
         const dy = point.y - dragOffset.y;
         onMoveStrokes(note.id, selectedStrokes, dx, dy);
         onMoveImages(note.id, selectedImages, dx, dy);
+        onMoveShapes(note.id, selectedShapes, dx, dy);
         setDragOffset(point);
         scheduleDraw();
       } else if (selectionBox) {
@@ -875,6 +1111,31 @@ export function InkCanvas({
       } else if (tool === "eraser") {
         // Clear trail when releasing eraser
         setEraserTrail([]);
+      } else if (tool === "shape" && tempShape) {
+        // Finalize shape
+        const isDirectional = shapeType === "line" || shapeType === "arrow" || shapeType === "triangle";
+        const x = isDirectional ? tempShape.startX : Math.min(tempShape.startX, tempShape.endX);
+        const y = isDirectional ? tempShape.startY : Math.min(tempShape.startY, tempShape.endY);
+        const width = isDirectional ? tempShape.endX - tempShape.startX : Math.abs(tempShape.endX - tempShape.startX);
+        const height = isDirectional ? tempShape.endY - tempShape.startY : Math.abs(tempShape.endY - tempShape.startY);
+
+        // Only add shape if it has some size
+        if (Math.abs(width) > 2 || Math.abs(height) > 2) {
+          const shape: Shape = {
+            id: uid(),
+            type: shapeType,
+            x,
+            y,
+            width,
+            height,
+            color,
+            strokeWidth: penSize,
+            filled: false,
+          };
+          onAddShape(note.id, shape);
+        }
+        setTempShape(null);
+        scheduleDraw();
       } else if (tool === "selector") {
         if (isResizing) {
           setIsResizing(false);
@@ -906,8 +1167,20 @@ export function InkCanvas({
               })
               .map((img) => img.id);
 
+          const selectedShapeIds = note.shapes
+              .filter((shape) => {
+                // Check if shape intersects with selection box
+                const sx = Math.min(shape.x, shape.x + shape.width);
+                const sy = Math.min(shape.y, shape.y + shape.height);
+                const sx2 = Math.max(shape.x, shape.x + shape.width);
+                const sy2 = Math.max(shape.y, shape.y + shape.height);
+                return !(sx2 < minX || sx > maxX || sy2 < minY || sy > maxY);
+              })
+              .map((s) => s.id);
+
           setSelectedStrokes(selectedStrokeIds);
           setSelectedImages(selectedImageIds);
+          setSelectedShapes(selectedShapeIds);
           setSelectionBox(null);
           scheduleDraw();
         }
@@ -931,10 +1204,10 @@ export function InkCanvas({
     onZoomViewportAt(note.id, nextScale, canvasPoint.x, canvasPoint.y);
   };
 
-  // Keyboard handler for deleting selected strokes and images
+  // Keyboard handler for deleting selected strokes, images, and shapes
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      if ((e.key === "Backspace" || e.key === "Delete") && (selectedStrokes.length > 0 || selectedImages.length > 0) && tool === "selector") {
+      if ((e.key === "Backspace" || e.key === "Delete") && (selectedStrokes.length > 0 || selectedImages.length > 0 || selectedShapes.length > 0) && tool === "selector") {
         e.preventDefault();
         if (selectedStrokes.length > 0) {
           onDeleteStrokes(note.id, selectedStrokes);
@@ -942,8 +1215,12 @@ export function InkCanvas({
         if (selectedImages.length > 0) {
           onDeleteImages(note.id, selectedImages);
         }
+        if (selectedShapes.length > 0) {
+          onDeleteShapes(note.id, selectedShapes);
+        }
         setSelectedStrokes([]);
         setSelectedImages([]);
+        setSelectedShapes([]);
       }
     };
 
@@ -951,7 +1228,7 @@ export function InkCanvas({
     return () => {
       window.removeEventListener("keydown", handleKeyDown);
     };
-  }, [selectedStrokes, selectedImages, tool, note.id, onDeleteStrokes, onDeleteImages]);
+  }, [selectedStrokes, selectedImages, selectedShapes, tool, note.id, onDeleteStrokes, onDeleteImages, onDeleteShapes]);
 
   const handlePopupDelete = () => {
     if (selectedStrokes.length > 0) {
@@ -960,8 +1237,12 @@ export function InkCanvas({
     if (selectedImages.length > 0) {
       onDeleteImages(note.id, selectedImages);
     }
+    if (selectedShapes.length > 0) {
+      onDeleteShapes(note.id, selectedShapes);
+    }
     setSelectedStrokes([]);
     setSelectedImages([]);
+    setSelectedShapes([]);
     setShowPopup(false);
   };
 
@@ -1156,6 +1437,7 @@ export function InkCanvas({
             onPointerUp={handlePointerUp}
             onPointerCancel={handlePointerUp}
             onWheel={handleWheel}
+            onContextMenu={(e) => e.preventDefault()}
         />
 
         {showPopup && (
