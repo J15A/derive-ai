@@ -101,7 +101,14 @@ export function InkCanvas({
   const [textInput, setTextInput] = useState<{ x: number; y: number; worldX: number; worldY: number } | null>(null);
   const [textValue, setTextValue] = useState("");
   const [tempShape, setTempShape] = useState<{ startX: number; startY: number; endX: number; endY: number } | null>(null);
-  const [loadedImages, setLoadedImages] = useState<Map<string, HTMLImageElement>>(new Map());
+  // Use a ref for loaded images to avoid re-creating drawScene on every image load.
+  // A counter state is used only to trigger a redraw when images finish loading.
+  const loadedImagesRef = useRef<Map<string, HTMLImageElement>>(new Map());
+  const [loadedImagesVersion, setLoadedImagesVersion] = useState(0);
+  
+  // Animation state for moving dashed border
+  const dashOffsetRef = useRef(0);
+  const animationFrameRef = useRef<number | null>(null);
 
   const drawScene = useCallback(() => {
     const canvas = canvasRef.current;
@@ -148,11 +155,31 @@ export function InkCanvas({
       ctx.restore();
     }
 
+    // Compute visible world-space bounds for viewport culling
+    const vpLeft = -note.viewport.offsetX / note.viewport.scale;
+    const vpTop = -note.viewport.offsetY / note.viewport.scale;
+    const vpRight = (rect.width - note.viewport.offsetX) / note.viewport.scale;
+    const vpBottom = (rect.height - note.viewport.offsetY) / note.viewport.scale;
+
     ctx.save();
     ctx.translate(note.viewport.offsetX, note.viewport.offsetY);
     ctx.scale(note.viewport.scale, note.viewport.scale);
 
     for (const stroke of note.strokes) {
+      // Viewport culling: compute stroke bounding box and skip if off-screen
+      const pts = stroke.points;
+      if (pts.length === 0) continue;
+      let sMinX = pts[0].x, sMaxX = pts[0].x, sMinY = pts[0].y, sMaxY = pts[0].y;
+      for (let i = 1; i < pts.length; i++) {
+        if (pts[i].x < sMinX) sMinX = pts[i].x;
+        if (pts[i].x > sMaxX) sMaxX = pts[i].x;
+        if (pts[i].y < sMinY) sMinY = pts[i].y;
+        if (pts[i].y > sMaxY) sMaxY = pts[i].y;
+      }
+      const pad = stroke.baseSize;
+      if (sMaxX + pad < vpLeft || sMinX - pad > vpRight || sMaxY + pad < vpTop || sMinY - pad > vpBottom) {
+        continue;
+      }
       const opacity = stroke.tool === "highlighter" ? 0.4 : 1;
 
       ctx.save();
@@ -177,6 +204,13 @@ export function InkCanvas({
 
     // Render text annotations in world coordinates with handwritten style
     for (const annotation of note.textAnnotations ?? []) {
+      // Viewport culling for text annotations
+      const aWidth = annotation.width ?? annotation.fontSize * annotation.text.length * 0.6;
+      const textLines = annotation.text.split("\n");
+      const aHeight = annotation.height ?? annotation.fontSize * 1.1 * textLines.length;
+      if (annotation.x + aWidth < vpLeft || annotation.x > vpRight || annotation.y + aHeight < vpTop || annotation.y > vpBottom) {
+        continue;
+      }
       ctx.save();
 
       // Use Caveat - a natural handwriting font
@@ -201,16 +235,28 @@ export function InkCanvas({
       ctx.restore();
     }
 
-    // Draw images
+    // Draw images (with viewport culling)
     for (const image of note.images) {
-      const img = loadedImages.get(image.id);
+      // Skip images entirely outside the viewport
+      if (image.x + image.width < vpLeft || image.x > vpRight || image.y + image.height < vpTop || image.y > vpBottom) {
+        continue;
+      }
+      const img = loadedImagesRef.current.get(image.id);
       if (img && img.complete) {
         ctx.drawImage(img, image.x, image.y, image.width, image.height);
       }
     }
 
-    // Draw shapes
+    // Draw shapes (with viewport culling)
     for (const shape of note.shapes) {
+      // Compute shape bounding box and skip if off-screen
+      const shMinX = Math.min(shape.x, shape.x + shape.width);
+      const shMinY = Math.min(shape.y, shape.y + shape.height);
+      const shMaxX = Math.max(shape.x, shape.x + shape.width);
+      const shMaxY = Math.max(shape.y, shape.y + shape.height);
+      if (shMaxX < vpLeft || shMinX > vpRight || shMaxY < vpTop || shMinY > vpBottom) {
+        continue;
+      }
       ctx.strokeStyle = shape.color;
       ctx.lineWidth = shape.strokeWidth;
       ctx.fillStyle = shape.color;
@@ -400,9 +446,12 @@ export function InkCanvas({
       if (minX !== Infinity && maxX !== -Infinity) {
         ctx.strokeStyle = "#3b82f6";
         ctx.lineWidth = 2 / note.viewport.scale;
-        ctx.setLineDash([5 / note.viewport.scale, 5 / note.viewport.scale]);
+        const dashLength = 5 / note.viewport.scale;
+        ctx.setLineDash([dashLength, dashLength]);
+        ctx.lineDashOffset = -dashOffsetRef.current / note.viewport.scale;
         ctx.strokeRect(minX - 5, minY - 5, maxX - minX + 10, maxY - minY + 10);
         ctx.setLineDash([]);
+        ctx.lineDashOffset = 0;
 
         // Draw resize handles at corners
         const handleSize = 8 / note.viewport.scale;
@@ -511,7 +560,7 @@ export function InkCanvas({
     selectedShapes,
     selectionBox,
     eraserTrail,
-    loadedImages,
+    loadedImagesVersion,
   ]);
 
   const scheduleDraw = useCallback(() => {
@@ -522,6 +571,11 @@ export function InkCanvas({
       rafRef.current = null;
       drawScene();
     });
+  }, [drawScene]);
+
+  const forceDrawNextFrame = useCallback(() => {
+    // Force draw without the guard - used for animations that need continuous updates
+    drawScene();
   }, [drawScene]);
 
   useEffect(() => {
@@ -563,36 +617,40 @@ export function InkCanvas({
     scheduleDraw();
   }, [note, tool, shapeType, tempShape, penSize, highlighterSize, color, highlighterColor, scheduleDraw]);
 
-  // Load images when they change
+  // Load images when note.images changes.
+  // Uses a ref so image loads don't recreate drawScene. Only bumps a version counter
+  // when loading finishes, which triggers a single lightweight redraw.
   useEffect(() => {
-    const newLoadedImages = new Map(loadedImages);
-    let hasChanges = false;
-
-    for (const image of note.images) {
-      if (!newLoadedImages.has(image.id)) {
-        const img = new Image();
-        img.src = image.dataUrl;
-        newLoadedImages.set(image.id, img);
-        hasChanges = true;
-
-        img.onload = () => {
-          scheduleDraw();
-        };
-      }
-    }
+    const currentMap = loadedImagesRef.current;
+    const currentIds = new Set(note.images.map((img) => img.id));
+    let cancelled = false;
 
     // Remove images that no longer exist
-    for (const [id] of newLoadedImages) {
-      if (!note.images.some((img) => img.id === id)) {
-        newLoadedImages.delete(id);
-        hasChanges = true;
+    for (const [id] of currentMap) {
+      if (!currentIds.has(id)) {
+        currentMap.delete(id);
       }
     }
 
-    if (hasChanges) {
-      setLoadedImages(newLoadedImages);
+    // Add new images
+    for (const image of note.images) {
+      if (!currentMap.has(image.id)) {
+        const img = new Image();
+        img.onload = () => {
+          if (!cancelled) {
+            // Bump version to trigger a redraw now that this image is decoded
+            setLoadedImagesVersion((v) => v + 1);
+          }
+        };
+        img.src = image.dataUrl;
+        currentMap.set(image.id, img);
+      }
     }
-  }, [note.images, scheduleDraw, loadedImages]);
+
+    return () => {
+      cancelled = true;
+    };
+  }, [note.images]);
 
   useEffect(() => {
     // Clear selection when switching away from selector tool
@@ -612,6 +670,35 @@ export function InkCanvas({
       setEraserTrail([]);
     }
   }, [tool, selectedStrokes.length, selectedImages.length, selectedShapes.length]);
+
+  // Animate the dashed border when items are selected
+  useEffect(() => {
+    const hasSelection = (selectedStrokes.length > 0 || selectedImages.length > 0 || selectedShapes.length > 0) && tool === "selector";
+    
+    if (hasSelection) {
+      // Start animation loop that continuously draws each frame
+      const animate = () => {
+        dashOffsetRef.current = (dashOffsetRef.current + 0.5) % 10; // Move 0.5px per frame, reset at 10 (dash pattern length)
+        forceDrawNextFrame(); // Draw directly without the scheduleDraw guard
+        animationFrameRef.current = requestAnimationFrame(animate);
+      };
+      animationFrameRef.current = requestAnimationFrame(animate);
+      
+      return () => {
+        if (animationFrameRef.current !== null) {
+          cancelAnimationFrame(animationFrameRef.current);
+          animationFrameRef.current = null;
+        }
+      };
+    } else {
+      // Reset dash offset when nothing is selected
+      dashOffsetRef.current = 0;
+      if (animationFrameRef.current !== null) {
+        cancelAnimationFrame(animationFrameRef.current);
+        animationFrameRef.current = null;
+      }
+    }
+  }, [selectedStrokes, selectedImages, selectedShapes, tool, forceDrawNextFrame]);
 
   // Show popup below selection when strokes or images are selected
   useEffect(() => {
@@ -695,6 +782,7 @@ export function InkCanvas({
       if (rafRef.current !== null) {
         cancelAnimationFrame(rafRef.current);
       }
+      loadedImagesRef.current.clear();
     };
   }, []);
 
@@ -750,6 +838,10 @@ export function InkCanvas({
       }
 
       pushPointerEvent(event);
+      // For active drawing we need immediate (synchronous) rendering so the
+      // user sees ink follow the pen without a frame of latency. scheduleDraw
+      // coalesces via RAF which is correct for most updates, but here we want
+      // the lowest-latency path.
       drawScene();
     };
 
@@ -758,6 +850,45 @@ export function InkCanvas({
       canvas.removeEventListener("pointerrawupdate", handlePointerRawUpdate);
     };
   }, [drawScene, pushPointerEvent, tool]);
+
+  // Smooth stroke points using a simple moving average filter
+  const smoothStrokePoints = useCallback((points: InkPoint[]): InkPoint[] => {
+    if (points.length < 3) return points;
+
+    const smoothed: InkPoint[] = [];
+    const windowSize = 3; // Use 3-point moving average for subtle smoothing
+
+    // Keep first point as-is
+    smoothed.push(points[0]);
+
+    // Smooth middle points
+    for (let i = 1; i < points.length - 1; i++) {
+      const start = Math.max(0, i - Math.floor(windowSize / 2));
+      const end = Math.min(points.length, i + Math.ceil(windowSize / 2));
+      
+      let sumX = 0;
+      let sumY = 0;
+      let count = 0;
+
+      for (let j = start; j < end; j++) {
+        sumX += points[j].x;
+        sumY += points[j].y;
+        count++;
+      }
+
+      smoothed.push({
+        x: sumX / count,
+        y: sumY / count,
+        pressure: points[i].pressure, // Preserve original pressure
+        timestamp: points[i].timestamp,
+      });
+    }
+
+    // Keep last point as-is
+    smoothed.push(points[points.length - 1]);
+
+    return smoothed;
+  }, []);
 
   const finishStroke = useCallback(() => {
     if (currentPointsRef.current.length === 1) {
@@ -775,19 +906,22 @@ export function InkCanvas({
       return;
     }
 
+    // Apply smoothing to the completed stroke
+    const smoothedPoints = smoothStrokePoints(currentPointsRef.current);
+
     const currentSize = tool === "highlighter" ? highlighterSize : penSize;
     const stroke: InkStroke = {
       id: uid(),
       tool: tool === "pen" || tool === "highlighter" ? tool : "pen",
       color: tool === "highlighter" ? highlighterColor : color,
       baseSize: currentSize,
-      points: [...currentPointsRef.current],
+      points: smoothedPoints,
     };
 
     onAppendStroke(note.id, stroke);
     currentPointsRef.current = [];
     scheduleDraw();
-  }, [color, highlighterColor, note.id, onAppendStroke, scheduleDraw, tool, penSize, highlighterSize]);
+  }, [color, highlighterColor, note.id, onAppendStroke, scheduleDraw, tool, penSize, highlighterSize, smoothStrokePoints]);
 
   const eraserRadius = useMemo(() => {
     const currentSize = tool === "highlighter" ? highlighterSize : penSize;
@@ -1087,6 +1221,7 @@ export function InkCanvas({
     }
 
     // Coalesced events improve ink quality on high-frequency pen sampling.
+    // Synchronous draw for lowest-latency ink rendering during active strokes.
     pushPointerEvent(e);
     drawScene();
   };
@@ -1869,23 +2004,20 @@ export function InkCanvas({
         }
         console.log("Step 13: Highlight created successfully");
         
-        // Add success message as green text below the selection
-        if (lines.length > 0) {
-          const lastLine = lines[lines.length - 1];
-          const messageY = lastLine.maxY + 30; // Position below the last line
-          const messageX = lastLine.minX;
-          
-          console.log("About to add success text annotation:", { x: messageX, y: messageY });
-          onAddTextAnnotation(note.id, {
-            id: uid(),
-            x: messageX,
-            y: messageY,
-            text: "✓ All steps are correct!",
-            fontSize: 18,
-            color: "#10B981", // green
-          });
-          console.log("Success text annotation added");
-        }
+        // Add success message as green text below the entire selection
+        const messageY = maxY + 30; // Position below the entire selection
+        const messageX = minX;
+        
+        console.log("About to add success text annotation:", { x: messageX, y: messageY });
+        onAddTextAnnotation(note.id, {
+          id: uid(),
+          x: messageX,
+          y: messageY,
+          text: "✓ All steps are correct!",
+          fontSize: 18,
+          color: "#10B981", // green
+        });
+        console.log("Success text annotation added");
       } else if (result.errorLine !== null && result.errorLine >= 1) {
         console.log(`Step 12: Error on line ${result.errorLine} - highlighting in red`);
         
@@ -1929,9 +2061,9 @@ export function InkCanvas({
         onAppendStroke(note.id, highlightStroke);
         console.log("Step 13: Red highlight created successfully");
 
-        // Add error message as red text below the error line
-        const messageY = lineToHighlight.maxY + 30; // Position below the error line
-        const messageX = lineToHighlight.minX;
+        // Add error message as red text below the entire selection (not just the error line)
+        const messageY = maxY + 30; // Position below the entire selection
+        const messageX = minX;
         
         let errorMessage = `✗ Mistake on line ${result.errorLine}`;
         if (result.explanation) {

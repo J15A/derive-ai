@@ -138,22 +138,25 @@ CRITICAL CHECKING RULES:
 3. Students may rearrange terms or write them in different orders - this is CORRECT as long as it's algebraically equivalent
 4. ONLY flag an error if there is an actual mathematical mistake (wrong sign, wrong coefficient, wrong operation, etc.)
 5. If a step is algebraically equivalent to what it should be, even if shown differently, it is CORRECT
+6. **IMPORTANT**: If a line contains a minor error BUT the error is corrected in the NEXT line, DO NOT flag it as an error. Only flag persistent errors that are NOT corrected.
 
 EXAMPLES OF WHAT IS CORRECT (NOT errors):
 - Expanding (x^2+x-6)(x+4) to x^3+x^2-6x+4x^2+4x-24 before simplifying (showing work)
 - Writing x^2+4x^2 as 5x^2 in a later step (combining like terms)
 - Rearranging terms: x^3+5x^2-2x-24 is the same as x^3-2x+5x^2-24
 - Distributing step by step vs all at once
+- Making a small mistake on one line but correcting it on the next line (self-correction)
 
-EXAMPLES OF ACTUAL ERRORS:
-- Wrong sign: (x+3)(x-2) = x^2+x-6 when it should be x^2+x-6 (if the arithmetic is wrong)
-- Wrong coefficient: 2x + 3x = 6x (should be 5x)
-- Wrong operation: x^2 * x^2 = x^4 written as x^8
+EXAMPLES OF ACTUAL ERRORS (that should be flagged):
+- Wrong sign that persists: (x+3)(x-2) = x^2+x-6 when it should be x^2+x-6, and the wrong answer is used in subsequent steps
+- Wrong coefficient that persists: 2x + 3x = 6x (should be 5x), and 6x is used in the final answer
+- Wrong operation: x^2 * x^2 = x^4 written as x^8, and x^8 appears in the final answer
 
 IMPORTANT:
 - Carefully verify the algebra step by step
 - Be lenient with valid algebraic manipulations
-- Only flag ACTUAL MATHEMATICAL ERRORS
+- Look ahead one line to see if errors are self-corrected before flagging them
+- Only flag errors that PERSIST and affect the final answer
 
 RESPONSE FORMAT - You MUST respond with ONLY valid JSON, no other text:
 If ALL steps are correct:
