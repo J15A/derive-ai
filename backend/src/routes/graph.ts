@@ -11,10 +11,25 @@ router.post("/", async (req: Request, res: Response) => {
       return res.status(500).json({ error: "OPENROUTER_API_KEY is not configured on the server" });
     }
 
-    const { imageDataUrl } = req.body as { imageDataUrl?: string };
+    const { imageDataUrl, latex } = req.body as { imageDataUrl?: string; latex?: string };
 
-    if (!imageDataUrl) {
-      return res.status(400).json({ error: "Missing imageDataUrl in request body" });
+    if (!imageDataUrl && !latex) {
+      return res.status(400).json({ error: "Missing imageDataUrl or latex in request body" });
+    }
+
+    let recognizedLatex: string;
+
+    // If latex is provided, skip image recognition and use it directly
+    if (latex) {
+      recognizedLatex = latex;
+      console.log("Using provided LaTeX for graphing:", recognizedLatex);
+      
+      // Clean up the LaTeX (remove dollar signs if present)
+      recognizedLatex = recognizedLatex.replace(/\$/g, '').trim();
+      
+      return res.json({ latex: recognizedLatex });
+    } else if (!imageDataUrl) {
+      return res.status(400).json({ error: "Either imageDataUrl or latex must be provided" });
     }
 
     // Use lightweight Gemini model for image recognition (just OCR, no solving needed)

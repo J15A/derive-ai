@@ -1,15 +1,17 @@
-import { Bot, Copy, Trash2, Palette, Calculator, Loader2, LineChart } from "lucide-react";
+import { Bot, Copy, Trash2, Palette, Calculator, Loader2, LineChart, ArrowRight } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 
 interface SelectionPopupProps {
   position: { x: number; y: number };
   isSolving?: boolean;
+  isGettingNextStep?: boolean;
   isGraphing?: boolean;
   isExplaining?: boolean;
   onDelete: () => void;
   onDuplicate: () => void;
   onChangeColor: (color: string) => void;
   onSolve: () => void;
+  onNextStep: () => void;
   onAddToGraph: () => void;
   onExplainWithGemini: () => void;
   onClose: () => void;
@@ -29,12 +31,14 @@ const COLORS = [
 export function SelectionPopup({ 
   position,
   isSolving = false,
+  isGettingNextStep = false,
   isGraphing = false,
   isExplaining = false,
   onDelete, 
   onDuplicate, 
   onChangeColor,
   onSolve,
+  onNextStep,
   onAddToGraph,
   onExplainWithGemini,
   onClose 
@@ -96,6 +100,16 @@ export function SelectionPopup({
         type="button"
       >
         {isSolving ? <Loader2 size={18} className="animate-spin" /> : <Calculator size={18} />}
+      </button>
+
+      <button
+        className="flex items-center justify-center rounded-md p-2 text-cyan-600 transition-colors hover:bg-cyan-50 disabled:opacity-50"
+        onClick={onNextStep}
+        disabled={isGettingNextStep}
+        title="Next Step"
+        type="button"
+      >
+        {isGettingNextStep ? <Loader2 size={18} className="animate-spin" /> : <ArrowRight size={18} />}
       </button>
 
       <button

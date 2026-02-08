@@ -537,6 +537,8 @@ export async function textToImage(
     width: croppedCanvas.width / dpr,
     height: croppedCanvas.height / dpr,
     createdAt: Date.now(),
+    latex: text, // Store the original LaTeX/text for re-processing
+    fontSize: fontSize, // Store the font size for consistent rendering
   };
 }
 

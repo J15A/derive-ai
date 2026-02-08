@@ -47,6 +47,8 @@ export interface WhiteboardImage {
   width: number;
   height: number;
   createdAt: number;
+  latex?: string; // Optional: stores the LaTeX source if this image was generated from LaTeX
+  fontSize?: number; // Optional: stores the font size used to render the LaTeX
 }
 
 export interface Shape {

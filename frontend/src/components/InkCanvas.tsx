@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { InkPoint, InkStroke, InkTool, Note, WhiteboardImage, ShapeType, Shape } from "../types";
 import { drawStrokePolygon, strokePolygon, strokesToPngDataUrl, uid } from "../utils/ink";
-import { solveEquation, recognizeEquationForGraph, recognizeSelectionContent } from "../api/client";
+import { solveEquation, recognizeEquationForGraph, recognizeSelectionContent, getNextStep } from "../api/client";
 import { SelectionPopup } from "./SelectionPopup";
 import { textToImage } from "../utils/textToImage";
 
@@ -92,6 +92,7 @@ export function InkCanvas({
   const [showPopup, setShowPopup] = useState(false);
   const [popupPosition, setPopupPosition] = useState<{ x: number; y: number }>({ x: 0, y: 0 });
   const [isSolving, setIsSolving] = useState(false);
+  const [isGettingNextStep, setIsGettingNextStep] = useState(false);
   const [isGraphing, setIsGraphing] = useState(false);
   const [isExplaining, setIsExplaining] = useState(false);
   const [textInput, setTextInput] = useState<{ x: number; y: number; worldX: number; worldY: number } | null>(null);
@@ -1252,25 +1253,41 @@ export function InkCanvas({
 
   const handlePopupSolve = async () => {
     const selectedStrokeObjects = note.strokes.filter((stroke) => selectedStrokes.includes(stroke.id));
+    const selectedImageObjects = note.images.filter((image) => selectedImages.includes(image.id));
 
-    if (selectedStrokeObjects.length === 0) return;
+    if (selectedStrokeObjects.length === 0 && selectedImageObjects.length === 0) return;
 
     setIsSolving(true);
 
     try {
-      // Render selected strokes to a PNG image
-      const imageDataUrl = strokesToPngDataUrl(selectedStrokeObjects);
+      let imageDataUrl: string | undefined;
+      let inputFontSize = 16;
+      let latex: string | undefined;
 
-      // Calculate average stroke size to send to backend
-      let totalSize = 0;
-      for (const stroke of selectedStrokeObjects) {
-        totalSize += stroke.baseSize;
+      // Check if we have selected images with LaTeX (prioritize this for speed)
+      if (selectedImageObjects.length > 0 && selectedImageObjects[0].latex) {
+        latex = selectedImageObjects[0].latex;
+        // Use the original font size from the image, or estimate if not stored
+        inputFontSize = selectedImageObjects[0].fontSize || Math.max(16, selectedImageObjects[0].height * 0.8);
+        console.log("Using LaTeX from selected image:", latex, "fontSize:", inputFontSize);
+      } else if (selectedStrokeObjects.length > 0) {
+        // Render selected strokes to a PNG image
+        imageDataUrl = strokesToPngDataUrl(selectedStrokeObjects);
+
+        // Calculate average stroke size to send to backend
+        let totalSize = 0;
+        for (const stroke of selectedStrokeObjects) {
+          totalSize += stroke.baseSize;
+        }
+        const avgStrokeSize = totalSize / selectedStrokeObjects.length;
+        inputFontSize = Math.max(16, avgStrokeSize * 10);
+      } else {
+        alert("⚠️ Please select handwritten strokes or LaTeX equations");
+        return;
       }
-      const avgStrokeSize = totalSize / selectedStrokeObjects.length;
-      const inputFontSize = Math.max(16, avgStrokeSize * 10);
 
       // Send to backend via API with font size information
-      const { result, fontSize: outputFontSize } = await solveEquation(imageDataUrl, inputFontSize);
+      const { result, fontSize: outputFontSize } = await solveEquation(imageDataUrl, inputFontSize, latex);
 
       // Check if equation was not recognized
       if (result.toLowerCase().includes("could not recognize")) {
@@ -1292,6 +1309,13 @@ export function InkCanvas({
           maxX = Math.max(maxX, p.x);
           maxY = Math.max(maxY, p.y);
         }
+      }
+
+      for (const image of selectedImageObjects) {
+        minX = Math.min(minX, image.x);
+        minY = Math.min(minY, image.y);
+        maxX = Math.max(maxX, image.x + image.width);
+        maxY = Math.max(maxY, image.y + image.height);
       }
 
       // Use the fontSize returned from the backend (2x the input)
@@ -1329,6 +1353,8 @@ export function InkCanvas({
 
       // Clear selection so user can see the solution immediately
       setSelectedStrokes([]);
+      setSelectedImages([]);
+      setSelectedShapes([]);
       setSelectionBox(null);
     } catch (error) {
       console.error("Failed to solve equation:", error);
@@ -1344,19 +1370,151 @@ export function InkCanvas({
     onChangeStrokesColor(note.id, selectedStrokes, newColor);
   };
 
-  const handlePopupAddToGraph = async () => {
+  const handlePopupNextStep = async () => {
     const selectedStrokeObjects = note.strokes.filter((stroke) => selectedStrokes.includes(stroke.id));
-    if (selectedStrokeObjects.length === 0) return;
+    const selectedImageObjects = note.images.filter((image) => selectedImages.includes(image.id));
 
-    setIsGraphing(true);
-    console.log("📈 Adding to graph:", selectedStrokeObjects.length, "strokes");
+    if (selectedStrokeObjects.length === 0 && selectedImageObjects.length === 0) return;
+
+    setIsGettingNextStep(true);
 
     try {
-      const imageDataUrl = strokesToPngDataUrl(selectedStrokeObjects);
-      console.log("📸 Generated image data URL, length:", imageDataUrl.length);
+      let imageDataUrl: string | undefined;
+      let inputFontSize = 16;
+      let latex: string | undefined;
 
-      const latex = await recognizeEquationForGraph(imageDataUrl);
-      console.log("✅ Recognized LaTeX:", latex);
+      // Check if we have selected images with LaTeX (prioritize this for speed)
+      if (selectedImageObjects.length > 0 && selectedImageObjects[0].latex) {
+        latex = selectedImageObjects[0].latex;
+        // Use the original font size from the image, or estimate if not stored
+        inputFontSize = selectedImageObjects[0].fontSize || Math.max(16, selectedImageObjects[0].height * 0.8);
+        console.log("Using LaTeX from selected image:", latex, "fontSize:", inputFontSize);
+      } else if (selectedStrokeObjects.length > 0) {
+        // Render selected strokes to a PNG image
+        imageDataUrl = strokesToPngDataUrl(selectedStrokeObjects);
+
+        // Calculate average stroke size to send to backend
+        let totalSize = 0;
+        for (const stroke of selectedStrokeObjects) {
+          totalSize += stroke.baseSize;
+        }
+        const avgStrokeSize = totalSize / selectedStrokeObjects.length;
+        inputFontSize = Math.max(16, avgStrokeSize * 10);
+      } else {
+        alert("⚠️ Please select handwritten strokes or LaTeX equations");
+        return;
+      }
+
+      // Send to backend via API with font size information
+      const { result, fontSize: outputFontSize } = await getNextStep(imageDataUrl, inputFontSize, latex);
+
+      // Check if equation was not recognized or could not determine next step
+      if (result.toLowerCase().includes("could not recognize")) {
+        alert("⚠️ Unable to recognize the equation\n\nPlease make sure your handwriting is clear and try again.");
+        return;
+      }
+      
+      if (result.toLowerCase().includes("could not get") || result.toLowerCase().includes("could not determine")) {
+        alert("⚠️ Unable to determine next step\n\nThe equation might already be solved or fully simplified.");
+        return;
+      }
+
+      // Calculate position based on the selection bounding box
+      let minX = Infinity;
+      let minY = Infinity;
+      let maxX = -Infinity;
+      let maxY = -Infinity;
+
+      for (const stroke of selectedStrokeObjects) {
+        for (const p of stroke.points) {
+          minX = Math.min(minX, p.x);
+          minY = Math.min(minY, p.y);
+          maxX = Math.max(maxX, p.x);
+          maxY = Math.max(maxY, p.y);
+        }
+      }
+
+      for (const image of selectedImageObjects) {
+        minX = Math.min(minX, image.x);
+        minY = Math.min(minY, image.y);
+        maxX = Math.max(maxX, image.x + image.width);
+        maxY = Math.max(maxY, image.y + image.height);
+      }
+
+      // Use the fontSize returned from the backend (2x the input)
+      const fontSize = outputFontSize;
+      
+      // Split result by newlines - we expect exactly 2 lines for next step
+      // Line 1: Current equation (skip this as it's already on the canvas)
+      // Line 2: Next step (show this)
+      const lines = result.split('\n').filter(line => line.trim());
+      
+      if (lines.length < 2) {
+        alert("⚠️ Could not determine next step\n\nPlease try again.");
+        return;
+      }
+      
+      // Start positioning right after the input equation with small padding
+      const stepPadding = 8;
+      const currentTop = maxY + stepPadding;
+      
+      // Render only the second line (the next step)
+      const nextStepLine = lines[1];
+      const tempImage = await textToImage(nextStepLine, minX, currentTop, fontSize, "#000000");
+      if (tempImage) {
+        // Override the y position to ensure top is exactly at currentTop
+        tempImage.y = currentTop;
+        onAddImage(note.id, tempImage);
+      }
+
+      // Force immediate redraw to show the next step
+      scheduleDraw();
+
+      // Clear selection so user can see the next step immediately
+      setSelectedStrokes([]);
+      setSelectedImages([]);
+      setSelectedShapes([]);
+      setSelectionBox(null);
+    } catch (error) {
+      console.error("Failed to get next step:", error);
+      const message = error instanceof Error ? error.message : "Failed to get next step";
+      alert(`❌ Error getting next step\n\n${message}`);
+    } finally {
+      setIsGettingNextStep(false);
+      setShowPopup(false);
+    }
+  };
+
+  const handlePopupAddToGraph = async () => {
+    const selectedStrokeObjects = note.strokes.filter((stroke) => selectedStrokes.includes(stroke.id));
+    const selectedImageObjects = note.images.filter((image) => selectedImages.includes(image.id));
+    
+    if (selectedStrokeObjects.length === 0 && selectedImageObjects.length === 0) return;
+
+    setIsGraphing(true);
+    console.log("📈 Adding to graph:", selectedStrokeObjects.length, "strokes,", selectedImageObjects.length, "images");
+
+    try {
+      let latex: string;
+
+      // Check if we have selected images with LaTeX (prioritize this for speed)
+      if (selectedImageObjects.length > 0 && selectedImageObjects[0].latex) {
+        const imageLaTeX = selectedImageObjects[0].latex;
+        console.log("📊 Using LaTeX from selected image:", imageLaTeX);
+        
+        // Send to backend with LaTeX (will skip recognition)
+        latex = await recognizeEquationForGraph(undefined, imageLaTeX);
+      } else if (selectedStrokeObjects.length > 0) {
+        // Use handwritten strokes
+        const imageDataUrl = strokesToPngDataUrl(selectedStrokeObjects);
+        console.log("📸 Generated image data URL, length:", imageDataUrl.length);
+
+        latex = await recognizeEquationForGraph(imageDataUrl);
+        console.log("✅ Recognized LaTeX:", latex);
+      } else {
+        alert("⚠️ Please select handwritten strokes or LaTeX equations");
+        return;
+      }
 
       if (onAddToGraph) {
         onAddToGraph(latex);
@@ -1366,6 +1524,8 @@ export function InkCanvas({
       }
 
       setSelectedStrokes([]);
+      setSelectedImages([]);
+      setSelectedShapes([]);
       setSelectionBox(null);
     } catch (error) {
       console.error("❌ Failed to add to graph:", error);
@@ -1530,12 +1690,14 @@ export function InkCanvas({
             <SelectionPopup
                 position={popupPosition}
                 isSolving={isSolving}
+                isGettingNextStep={isGettingNextStep}
                 isGraphing={isGraphing}
                 isExplaining={isExplaining}
                 onDelete={handlePopupDelete}
                 onDuplicate={handlePopupDuplicate}
                 onChangeColor={handlePopupChangeColor}
                 onSolve={handlePopupSolve}
+                onNextStep={handlePopupNextStep}
                 onAddToGraph={handlePopupAddToGraph}
                 onExplainWithGemini={handlePopupExplainWithGemini}
                 onClose={handlePopupClose}

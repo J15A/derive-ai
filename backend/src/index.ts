@@ -5,6 +5,7 @@ import { connectToDatabase, closeDatabase } from "./mongodb.js";
 import { requireAuth } from "./middleware/auth.js";
 import notesRouter from "./routes/notes.js";
 import solveRouter from "./routes/solve.js";
+import nextstepRouter from "./routes/nextstep.js";
 import graphRouter from "./routes/graph.js";
 import recognizeRouter from "./routes/recognize.js";
 import chatRouter from "./routes/chat.js";
@@ -33,6 +34,7 @@ app.get("/health", (req, res) => {
 // Routes
 app.use("/api/notes", requireAuth, notesRouter);
 app.use("/api/solve", solveRouter);
+app.use("/api/nextstep", nextstepRouter);
 app.use("/api/graph", graphRouter);
 app.use("/api/recognize", recognizeRouter);
 app.use("/api/chat", requireAuth, chatRouter);

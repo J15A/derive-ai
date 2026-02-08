@@ -1,14 +1,7 @@
 import { Router, Request, Response } from "express";
+import { RECOGNITION_MODEL } from "./solve";
 
 const router = Router();
-
-// Strong model for solving - using a thinking model for better reasoning
-// DeepSeek R1 is a powerful reasoning model that shows its thought process
-const SOLVER_MODEL = "deepseek/deepseek-r1";
-
-// Recognition model for graph (also using GPT-4o for better accuracy)
-// Upgraded from gpt-4o-mini to gpt-4o for better handwriting recognition
-export const RECOGNITION_MODEL = "openai/gpt-4o";
 
 router.post("/", async (req: Request, res: Response) => {
   try {
@@ -136,8 +129,9 @@ RESPONSE FORMAT:
       return res.status(400).json({ error: "Either imageDataUrl or latex must be provided" });
     }
 
-    // Step 2: Use thinking model to solve the recognized equation
-    const solveResponse = await fetch("https://openrouter.ai/api/v1/chat/completions", {
+    // Step 2: Ask the same vision model for just the next step (faster - single API call)
+    // Using the vision model that already has the image context
+    const nextStepResponse = await fetch("https://openrouter.ai/api/v1/chat/completions", {
       method: "POST",
       headers: {
         "Authorization": `Bearer ${OPENROUTER_API_KEY}`,
@@ -146,90 +140,103 @@ RESPONSE FORMAT:
         "X-Title": "Derive AI Notebook",
       },
       body: JSON.stringify({
-        model: SOLVER_MODEL,
+        model: RECOGNITION_MODEL, // Use same model for speed
         messages: [
           {
             role: "user",
-            content: `You are a math expert. Solve this mathematical expression or equation step by step: ${recognizedEquation}
+            content: `You are a math tutor helping a student solve this equation step by step: ${recognizedEquation}
 
-INSTRUCTIONS:
-1. Solve or simplify the expression/equation completely
-2. For implicit equations (like x² + y² = 4), identify what they represent (e.g., "circle with radius 2")
-3. For equations with a single variable, solve for that variable
-4. Show your work with clear steps
-5. Format your response using LaTeX
+Your task: Show the student what the NEXT mathematical operation or transformation should be to progress toward the solution.
+
+CRITICAL REQUIREMENTS:
+- Line 2 MUST be different from Line 1 - you must actually perform ONE mathematical operation
+- Apply ONE logical step: simplify, factor, isolate variable, expand, combine like terms, etc.
+- Do NOT just repeat the equation - TRANSFORM it
+- If the input contains an equals sign (=), prefix line 2 with "=" but ensure only ONE equals sign total per line
+- For expressions without equals signs (like integrals or simplifications), don't add one
 
 RESPONSE FORMAT - CRITICAL:
-- Output ONLY LaTeX math expressions wrapped in SINGLE dollar signs: $expression$
-- DO NOT use double dollar signs ($$), only single $ delimiters
-- NO blank lines between steps
-- NO English words, NO labels like "Step 1:", NO explanations
-- Each step should be on its own line as: $math expression$
-- For implicit equations, you may use \\text{} to describe what it represents
-- For integrals, use proper notation: \\int with \\, dx, show intermediate steps, include +C for indefinite integrals
-- Use LaTeX arrow (\\to) or equals signs to show progression
-- The last line should be the final answer
-- Use proper LaTeX formatting for fractions, exponents, integrals, etc.
+- Output EXACTLY TWO lines
+- Line 1: The current equation (exactly as given)
+- Line 2: The result after applying ONE mathematical operation
+- MUST use single dollar signs: $equation$
+- DO NOT use \\( \\) or \\[ \\] delimiters
+- DO NOT use double dollar signs $$
+- NO explanations, NO text, ONLY math wrapped in single $ signs
+- Each line should have AT MOST one equals sign
 
-EXAMPLES:
+EXAMPLES showing TRANSFORMATIONS (notice the single $ delimiters and single = per line):
+
 For "$2x + 4 = 10$":
 $2x + 4 = 10$
 $2x = 10 - 4$
+
+For "$2x = 6$":
 $2x = 6$
 $x = 3$
+
+For "$2x = 10 - 4$":
+$2x = 10 - 4$
+$2x = 6$
 
 For "$x^2 - 4 = 0$":
 $x^2 - 4 = 0$
 $(x-2)(x+2) = 0$
-$x - 2 = 0 \\text{ or } x + 2 = 0$
-$x = 2 \\text{ or } x = -2$
 
 For "$\\sqrt{x} = 4$":
 $\\sqrt{x} = 4$
-$(\\sqrt{x})^2 = 4^2$
 $x = 16$
 
-For "$x^2 + y^2 = 4$" (implicit equation):
-$x^2 + y^2 = 4$
-$x^2 + y^2 = 2^2$
-$\\text{Circle with center } (0,0) \\text{ and radius } 2$
+For "$\\int x \\, dx$" (no equals sign in input, so none in output):
+$\\int x \\, dx$
+$\\frac{x^2}{2} + C$
 
-For "$\\int 2x \\, dx$":
-$\\int 2x \\, dx$
-$= 2 \\int x \\, dx$
-$= 2 \\cdot \\frac{x^2}{2} + C$
-$= x^2 + C$
+For "$3x + 6 = 12$":
+$3x + 6 = 12$
+$3x = 6$
 
-IMPORTANT: 
-- Output ONLY math in LaTeX format. English words only inside \\text{} when necessary
-- Keep output compact and avoid overly verbose steps`,
+For "$x^2 + 5x + 6 = 0$":
+$x^2 + 5x + 6 = 0$
+$(x+2)(x+3) = 0$
+
+For "$(x+2)(x+3) = 0$":
+$(x+2)(x+3) = 0$
+$x = -2 \\text{ or } x = -3$
+
+IMPORTANT: Use ONLY single dollar signs $ for delimiters. Line 2 MUST be DIFFERENT from Line 1. Each line should have AT MOST one equals sign!`,
           },
         ],
       }),
     });
 
-    if (!solveResponse.ok) {
-      const errorData = await solveResponse.json().catch(() => ({}));
-      console.error("OpenRouter API error (solving):", errorData);
-      return res.status(solveResponse.status).json({
-        error: (errorData as { error?: { message?: string } }).error?.message || "Failed to solve equation",
+    if (!nextStepResponse.ok) {
+      const errorData = await nextStepResponse.json().catch(() => ({}));
+      console.error("OpenRouter API error (next step):", errorData);
+      return res.status(nextStepResponse.status).json({
+        error: (errorData as { error?: { message?: string } }).error?.message || "Failed to get next step",
       });
     }
 
-    const solveData = await solveResponse.json() as {
+    const nextStepData = await nextStepResponse.json() as {
       choices?: Array<{ message?: { content?: string } }>;
     };
 
-    const result = solveData.choices?.[0]?.message?.content?.trim();
+    const result = nextStepData.choices?.[0]?.message?.content?.trim();
 
     if (!result) {
-      return res.json({ result: "Could not solve equation" });
+      return res.json({ result: "Could not get next step" });
     }
 
-    console.log("Solve result:", result);
+    console.log("Next step result:", result);
 
     // Clean up the result - ensure it's properly formatted
     let formattedResult = result;
+    
+    // Convert LaTeX delimiters to single dollar signs
+    // Replace \( \) with $ $
+    formattedResult = formattedResult.replace(/\\\(/g, '$').replace(/\\\)/g, '$');
+    // Replace \[ \] with $ $
+    formattedResult = formattedResult.replace(/\\\[/g, '$').replace(/\\\]/g, '$');
     
     // Remove blank lines
     formattedResult = formattedResult
@@ -241,7 +248,6 @@ IMPORTANT:
     formattedResult = formattedResult.replace(/\$\$/g, '$');
     
     // Fix lines that are missing opening $ delimiter
-    // Pattern: lines that start with LaTeX content but missing opening $
     formattedResult = formattedResult
       .split('\n')
       .map(line => {
@@ -269,10 +275,29 @@ IMPORTANT:
       })
       .join('\n');
 
+    // Ensure we only return up to 2 lines (current + next step)
+    const lines = formattedResult.split('\n').filter(line => line.trim());
+    
+    if (lines.length < 2) {
+      console.error("Model did not return 2 lines");
+      return res.json({ result: "Could not get next step" });
+    }
+    
+    // Validate that line 2 is actually different from line 1
+    const line1 = lines[0].trim();
+    const line2 = lines[1].trim();
+    
+    if (line1 === line2) {
+      console.error("Model returned identical lines - no transformation was made");
+      return res.json({ result: "Could not determine next step - equation may already be solved or simplified" });
+    }
+    
+    formattedResult = lines.slice(0, 2).join('\n');
+
     res.json({ result: formattedResult, fontSize: outputFontSize });
   } catch (error) {
-    console.error("Error solving equation:", error);
-    res.status(500).json({ error: "Failed to solve equation" });
+    console.error("Error getting next step:", error);
+    res.status(500).json({ error: "Failed to get next step" });
   }
 });
 
