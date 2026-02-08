@@ -63,6 +63,8 @@ router.post("/", async (req: Request, res: Response) => {
 
     const note: Note = {
       ...(incoming as Note),
+      text: incoming.text ?? "",
+      chatMessages: incoming.chatMessages ?? [],
       ownerSub,
     };
     

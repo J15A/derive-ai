@@ -1,6 +1,7 @@
 import { useEffect, useRef } from "react";
 import type { InkTool } from "../types";
 import { 
+  Bot,
   Pen, 
   Eraser, 
   Hand, 
@@ -10,7 +11,6 @@ import {
   Minimize,
   Settings,
   Grid3x3,
-  Type,
   ZoomIn,
   ZoomOut,
   Focus,
@@ -75,6 +75,7 @@ const PEN_COLORS = [
 
 export function Toolbar({
   tool,
+  color,
   penSize,
   highlighterSize,
   showGrid,
@@ -106,6 +107,14 @@ export function Toolbar({
   const [showHighlighterMenu, setShowHighlighterMenu] = useState(false);
   const [penColor, setPenColor] = useState("#111827");
   const [highlighterColor, setHighlighterColor] = useState(HIGHLIGHTER_COLORS[0].value);
+
+  useEffect(() => {
+    if (tool === "pen") {
+      setPenColor(color);
+    } else if (tool === "highlighter") {
+      setHighlighterColor(color);
+    }
+  }, [color, tool]);
 
   useEffect(() => {
     const handlePointerDown = (event: PointerEvent) => {
@@ -312,9 +321,9 @@ export function Toolbar({
           className={`tool-btn ${showTextPanel ? "tool-btn-active" : ""}`}
           type="button" 
           onClick={() => onShowTextPanelChange(!showTextPanel)}
-          title="Toggle Text Panel"
+          title="Toggle Gemini Chat"
         >
-          <Type size={20} />
+          <Bot size={20} />
         </button>
         <button 
           className={`tool-btn ${showGraphPanel ? "tool-btn-active" : ""}`}

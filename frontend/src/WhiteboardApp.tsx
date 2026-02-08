@@ -8,6 +8,7 @@ import {
   deleteNote as deleteNoteInDb,
   loadNotesFromDb,
   saveNotesToDb,
+  sendChatMessageStream,
   setAccessTokenProvider,
 } from "./api/client";
 import { useNoteStore } from "./store/noteStore";
@@ -35,7 +36,11 @@ export default function WhiteboardApp(): JSX.Element {
     deleteNote,
     reorderNotes,
     setSearchQuery,
-    updateNoteText,
+    addUserChatMessage,
+    addAssistantChatMessage,
+    removeChatMessage,
+    updateChatMessageContent,
+    clearChatMessages,
     setTool,
     setColor,
     setPenSize,
@@ -65,6 +70,8 @@ export default function WhiteboardApp(): JSX.Element {
 
   const [isPending, startTransition] = useTransition();
   const [uiSettingsReady, setUiSettingsReady] = useState(false);
+  const [isChatSending, setIsChatSending] = useState(false);
+  const [chatError, setChatError] = useState<string | null>(null);
   const [sidebarCollapsed, setSidebarCollapsed] = useState<boolean>(() =>
     typeof window !== "undefined" ? window.matchMedia("(max-width: 639px)").matches : false,
   );
@@ -79,6 +86,7 @@ export default function WhiteboardApp(): JSX.Element {
   }, [notes, selectedNoteId]);
   const showPhoneSidebarScreen = isPhone && !sidebarCollapsed;
   const saveTimerRef = useRef<number | null>(null);
+  const chatAbortRef = useRef<AbortController | null>(null);
 
   const handleCreateNote = useCallback(() => {
     const note = createNote();
@@ -101,6 +109,94 @@ export default function WhiteboardApp(): JSX.Element {
         console.error("Failed to delete note from database:", error);
       });
   }, [deleteNote, startTransition]);
+
+  const handleSendChatMessage = useCallback(async (content: string) => {
+    if (!selectedNoteId || isChatSending) {
+      return;
+    }
+
+    const activeNote = notes.find((note) => note.id === selectedNoteId);
+    if (!activeNote) {
+      return;
+    }
+
+    setChatError(null);
+    const userMessage = addUserChatMessage(selectedNoteId, content);
+    const assistantMessage = addAssistantChatMessage(selectedNoteId, "");
+    setIsChatSending(true);
+    const abortController = new AbortController();
+    chatAbortRef.current = abortController;
+    let finalAssistantText = "";
+
+    try {
+      const messagesForApi = [...(activeNote.chatMessages ?? []), userMessage]
+        .slice(-12)
+        .map((message) => ({
+          role: message.role,
+          content: message.content,
+        }));
+
+      await sendChatMessageStream(
+        {
+          noteId: selectedNoteId,
+          messages: messagesForApi,
+        },
+        {
+          signal: abortController.signal,
+          onDelta: (chunk) => {
+            finalAssistantText += chunk;
+            updateChatMessageContent(selectedNoteId, assistantMessage.id, finalAssistantText);
+          },
+        },
+      );
+
+      if (!finalAssistantText.trim()) {
+        removeChatMessage(selectedNoteId, assistantMessage.id);
+      }
+    } catch (error: unknown) {
+      if (error instanceof DOMException && error.name === "AbortError") {
+        if (!finalAssistantText.trim()) {
+          removeChatMessage(selectedNoteId, assistantMessage.id);
+        }
+      } else {
+        if (!finalAssistantText.trim()) {
+          removeChatMessage(selectedNoteId, assistantMessage.id);
+        }
+        const message = error instanceof Error ? error.message : "Failed to send chat message";
+        setChatError(message);
+      }
+    } finally {
+      chatAbortRef.current = null;
+      setIsChatSending(false);
+    }
+  }, [
+    addAssistantChatMessage,
+    addUserChatMessage,
+    isChatSending,
+    notes,
+    removeChatMessage,
+    selectedNoteId,
+    updateChatMessageContent,
+  ]);
+
+  const handleStopChatGeneration = useCallback(() => {
+    chatAbortRef.current?.abort();
+  }, []);
+
+  const handleExplainWithGemini = useCallback(async (recognizedText: string) => {
+    const prompt = [
+      "Explain this selected note clearly and step by step.",
+      "Keep it concise, but include intuition and a quick example if useful.",
+      "",
+      `Selected note text: ${recognizedText}`,
+    ].join("\n");
+
+    if (!showTextPanel) {
+      setShowTextPanel(true);
+    }
+
+    await handleSendChatMessage(prompt);
+  }, [handleSendChatMessage, setShowTextPanel, showTextPanel]);
 
   useEffect(() => {
     setAccessTokenProvider(() =>
@@ -265,6 +361,21 @@ export default function WhiteboardApp(): JSX.Element {
     }
   }, [notes, selectedNoteId, selectNote]);
 
+  useEffect(() => {
+    setChatError(null);
+    if (chatAbortRef.current) {
+      chatAbortRef.current.abort();
+      chatAbortRef.current = null;
+    }
+  }, [selectedNoteId]);
+
+  useEffect(() => () => {
+    if (chatAbortRef.current) {
+      chatAbortRef.current.abort();
+      chatAbortRef.current = null;
+    }
+  }, []);
+
   return (
     <div className="h-screen overflow-hidden">
       <div
@@ -372,7 +483,23 @@ export default function WhiteboardApp(): JSX.Element {
               highlighterSize={highlighterSize}
               showGrid={showGrid}
               showTextPanel={showTextPanel}
-              onTextChange={updateNoteText}
+              chatMessages={selectedNote?.chatMessages ?? []}
+              onSendChatMessage={handleSendChatMessage}
+              onExplainWithGemini={handleExplainWithGemini}
+              onStopChatGeneration={handleStopChatGeneration}
+              onClearChat={() => {
+                if (!selectedNoteId) {
+                  return;
+                }
+                if (chatAbortRef.current) {
+                  chatAbortRef.current.abort();
+                  chatAbortRef.current = null;
+                }
+                clearChatMessages(selectedNoteId);
+                setChatError(null);
+              }}
+              isChatSending={isChatSending}
+              chatError={chatError}
               onToolChange={setTool}
               onColorChange={setColor}
               onPenSizeChange={setPenSize}

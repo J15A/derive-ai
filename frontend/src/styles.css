@@ -71,4 +71,29 @@
   .markdown-body pre {
     @apply overflow-auto rounded-lg bg-slate-900 p-3 text-slate-100;
   }
+
+  .chat-markdown p {
+    @apply my-1 leading-6 text-inherit;
+  }
+
+  .chat-markdown ul,
+  .chat-markdown ol {
+    @apply my-1 pl-5;
+  }
+
+  .chat-markdown li {
+    @apply my-0.5;
+  }
+
+  .chat-markdown pre {
+    @apply my-1.5;
+  }
+
+  .chat-markdown code {
+    @apply text-[0.9em];
+  }
+
+  .chat-markdown .chat-math-block {
+    @apply my-1 overflow-x-auto;
+  }
 }

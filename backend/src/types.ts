@@ -19,11 +19,21 @@ export interface CanvasViewport {
   scale: number;
 }
 
+export type ChatRole = "user" | "assistant" | "system";
+
+export interface ChatMessage {
+  id: string;
+  role: ChatRole;
+  content: string;
+  createdAt: number;
+}
+
 export interface Note {
   ownerSub: string;
   id: string;
   title: string;
   text: string;
+  chatMessages: ChatMessage[];
   strokes: InkStroke[];
   undoneStrokes: InkStroke[];
   viewport: CanvasViewport;

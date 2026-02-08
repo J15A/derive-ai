@@ -6,7 +6,7 @@
  * communication with MongoDB.
  */
 
-import type { Note } from "../types";
+import type { ChatRole, Note } from "../types";
 
 const API_BASE_URL = import.meta.env.VITE_API_URL || "http://localhost:3001/api";
 
@@ -159,4 +159,106 @@ export async function recognizeEquationForGraph(imageDataUrl: string): Promise<s
 
   const data = (await response.json()) as { latex: string };
   return data.latex;
+}
+
+interface ChatApiMessage {
+  role: ChatRole;
+  content: string;
+}
+
+interface SendChatMessageRequest {
+  noteId: string;
+  messages: ChatApiMessage[];
+}
+
+interface SendChatMessageStreamOptions {
+  signal?: AbortSignal;
+  onDelta: (chunk: string) => void;
+}
+
+export async function sendChatMessage(payload: SendChatMessageRequest): Promise<string> {
+  const headers = await buildAuthHeaders({
+    "Content-Type": "application/json",
+  });
+
+  const response = await fetch(`${API_BASE_URL}/chat`, {
+    method: "POST",
+    headers,
+    body: JSON.stringify(payload),
+  });
+
+  if (!response.ok) {
+    const body = await response.json().catch(() => ({}));
+    throw new Error((body as { error?: string }).error || `Failed to send chat message: ${response.statusText}`);
+  }
+
+  const data = (await response.json()) as { reply: string };
+  return data.reply;
+}
+
+export async function sendChatMessageStream(
+  payload: SendChatMessageRequest,
+  options: SendChatMessageStreamOptions,
+): Promise<void> {
+  const headers = await buildAuthHeaders({
+    "Content-Type": "application/json",
+  });
+
+  const response = await fetch(`${API_BASE_URL}/chat?stream=true`, {
+    method: "POST",
+    headers,
+    body: JSON.stringify(payload),
+    signal: options.signal,
+  });
+
+  if (!response.ok) {
+    const body = await response.json().catch(() => ({}));
+    throw new Error((body as { error?: string }).error || `Failed to send chat message: ${response.statusText}`);
+  }
+
+  if (!response.body) {
+    throw new Error("Chat stream body is missing");
+  }
+
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = "";
+
+  while (true) {
+    const { value, done } = await reader.read();
+    if (done) {
+      break;
+    }
+
+    buffer += decoder.decode(value, { stream: true });
+    const events = buffer.split("\n\n");
+    buffer = events.pop() ?? "";
+
+    for (const eventChunk of events) {
+      const lines = eventChunk
+        .split("\n")
+        .map((line) => line.trim())
+        .filter((line) => line.startsWith("data:"));
+
+      for (const line of lines) {
+        const jsonText = line.slice(5).trim();
+        if (!jsonText) {
+          continue;
+        }
+
+        let payloadData: { type?: string; delta?: string; error?: string } | null = null;
+        try {
+          payloadData = JSON.parse(jsonText) as { type?: string; delta?: string; error?: string };
+        } catch {
+          continue;
+        }
+
+        if (payloadData.type === "delta" && payloadData.delta) {
+          options.onDelta(payloadData.delta);
+        } else if (payloadData.type === "error") {
+          throw new Error(payloadData.error || "Stream failed");
+        }
+      }
+    }
+  }
 }

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import type { Note, NoteBundle, InkTool, TextAnnotation, WhiteboardImage } from "../types";
+import type { ChatMessage, Note, NoteBundle, InkTool, TextAnnotation, WhiteboardImage } from "../types";
 import { buildNoteBundle } from "../store/noteStore";
 import { strokesToPngDataUrl } from "../utils/ink";
 import { uid } from "../utils/ink";
@@ -9,6 +9,8 @@ import { GraphPanel } from "./GraphPanel";
 import type { GraphEquation } from "./GraphPanel";
 import { Toolbar } from "./Toolbar";
 
+const GRAPH_PANEL_VISIBILITY_KEY = "deriveAiGraphPanelVisible";
+
 interface NoteEditorProps {
   note: Note | null;
   tool: InkTool;
@@ -17,7 +19,13 @@ interface NoteEditorProps {
   highlighterSize: number;
   showGrid: boolean;
   showTextPanel: boolean;
-  onTextChange: (value: string) => void;
+  chatMessages: ChatMessage[];
+  onSendChatMessage: (value: string) => Promise<void>;
+  onExplainWithGemini: (recognizedText: string) => Promise<void>;
+  onStopChatGeneration: () => void;
+  onClearChat: () => void;
+  isChatSending: boolean;
+  chatError: string | null;
   onToolChange: (tool: InkTool) => void;
   onColorChange: (value: string) => void;
   onPenSizeChange: (value: number) => void;
@@ -63,7 +71,13 @@ export function NoteEditor({
   highlighterSize,
   showGrid,
   showTextPanel,
-  onTextChange,
+  chatMessages,
+  onSendChatMessage,
+  onExplainWithGemini,
+  onStopChatGeneration,
+  onClearChat,
+  isChatSending,
+  chatError,
   onToolChange,
   onColorChange,
   onPenSizeChange,
@@ -114,7 +128,8 @@ export function NoteEditor({
     startHeight: number;
   } | null>(null);
   const [notesPanelPosition, setNotesPanelPosition] = useState<{ x: number; y: number } | null>(null);
-  const [notesPanelSize, setNotesPanelSize] = useState<{ width: number; height: number }>({ width: 420, height: 420 });
+  const [notesPanelSize, setNotesPanelSize] = useState<{ width: number; height: number }>({ width: 420, height: 620 });
+  const notesPanelRef = useRef<HTMLElement | null>(null);
   const [isDraggingNotesPanel, setIsDraggingNotesPanel] = useState(false);
   const notesDragOffsetRef = useRef<{ x: number; y: number } | null>(null);
   const [isResizingNotesPanel, setIsResizingNotesPanel] = useState(false);
@@ -189,7 +204,8 @@ export function NoteEditor({
   const getDefaultNotesPanelPosition = useCallback((): { x: number; y: number } => {
     const margin = 12;
     const containerWidth = canvasAreaRef.current?.clientWidth ?? window.innerWidth;
-    const x = Math.max(margin, containerWidth - notesPanelSize.width - margin);
+    const effectiveWidth = Math.min(notesPanelSize.width, Math.max(200, containerWidth - margin * 2));
+    const x = Math.max(margin, containerWidth - effectiveWidth - margin);
     return { x, y: margin };
   }, [notesPanelSize.width]);
 
@@ -270,6 +286,25 @@ export function NoteEditor({
   }, []);
 
   useEffect(() => {
+    try {
+      const raw = window.localStorage.getItem(GRAPH_PANEL_VISIBILITY_KEY);
+      if (raw === "1") {
+        setShowGraphPanel(true);
+      }
+    } catch (error) {
+      console.error("Failed to load graph panel visibility", error);
+    }
+  }, []);
+
+  useEffect(() => {
+    try {
+      window.localStorage.setItem(GRAPH_PANEL_VISIBILITY_KEY, showGraphPanel ? "1" : "0");
+    } catch (error) {
+      console.error("Failed to save graph panel visibility", error);
+    }
+  }, [showGraphPanel]);
+
+  useEffect(() => {
     const onFullscreenChange = () => {
       setIsFullscreen(document.fullscreenElement === rootRef.current);
     };
@@ -289,6 +324,9 @@ export function NoteEditor({
 
   useEffect(() => {
     if (!showTextPanel || notesPanelPosition !== null) {
+      return;
+    }
+    if (!canvasAreaRef.current || canvasAreaRef.current.clientWidth === 0) {
       return;
     }
     setNotesPanelPosition(getDefaultNotesPanelPosition());
@@ -313,12 +351,46 @@ export function NoteEditor({
     }
     const margin = 12;
     const container = canvasAreaRef.current;
-    const currentHeight = notesCollapsed ? 44 : notesPanelSize.height;
-    const clampedX = Math.max(margin, Math.min(notesPanelPosition.x, container.clientWidth - notesPanelSize.width - margin));
+    const panelWidth = notesPanelRef.current?.clientWidth ?? notesPanelSize.width;
+    const panelHeight = notesPanelRef.current?.clientHeight ?? (notesCollapsed ? 44 : notesPanelSize.height);
+    const currentHeight = notesCollapsed ? 44 : panelHeight;
+    const clampedX = Math.max(margin, Math.min(notesPanelPosition.x, container.clientWidth - panelWidth - margin));
     const clampedY = Math.max(margin, Math.min(notesPanelPosition.y, container.clientHeight - currentHeight - margin));
     if (clampedX !== notesPanelPosition.x || clampedY !== notesPanelPosition.y) {
       setNotesPanelPosition({ x: clampedX, y: clampedY });
     }
+  }, [notesCollapsed, notesPanelPosition, notesPanelSize.height, notesPanelSize.width, showTextPanel]);
+
+  useEffect(() => {
+    if (!showTextPanel || !notesPanelPosition || !canvasAreaRef.current) {
+      return;
+    }
+
+    const clampToViewport = () => {
+      const container = canvasAreaRef.current;
+      if (!container) {
+        return;
+      }
+      const margin = 12;
+      const panelWidth = notesPanelRef.current?.clientWidth ?? notesPanelSize.width;
+      const panelHeight = notesPanelRef.current?.clientHeight ?? (notesCollapsed ? 44 : notesPanelSize.height);
+      const currentHeight = notesCollapsed ? 44 : panelHeight;
+      const clampedX = Math.max(margin, Math.min(notesPanelPosition.x, container.clientWidth - panelWidth - margin));
+      const clampedY = Math.max(margin, Math.min(notesPanelPosition.y, container.clientHeight - currentHeight - margin));
+      if (clampedX !== notesPanelPosition.x || clampedY !== notesPanelPosition.y) {
+        setNotesPanelPosition({ x: clampedX, y: clampedY });
+      }
+    };
+
+    const observer = new ResizeObserver(() => {
+      clampToViewport();
+    });
+    observer.observe(canvasAreaRef.current);
+    clampToViewport();
+
+    return () => {
+      observer.disconnect();
+    };
   }, [notesCollapsed, notesPanelPosition, notesPanelSize.height, notesPanelSize.width, showTextPanel]);
 
   useEffect(() => {
@@ -449,7 +521,7 @@ export function NoteEditor({
       }
       const margin = 12;
       const minWidth = 340;
-      const minHeight = 220;
+      const minHeight = 360;
       const right = start.startLeft + start.startWidth;
       const bottom = start.startTop + start.startHeight;
       const maxWidth = Math.max(minWidth, right - margin);
@@ -569,6 +641,11 @@ export function NoteEditor({
     });
   };
 
+  const initialNotesWidth = Math.min(
+    notesPanelSize.width,
+    Math.max(220, (canvasAreaRef.current?.clientWidth ?? window.innerWidth) - 24),
+  );
+
   return (
     <main className="flex h-full min-h-0 min-w-0 flex-col overflow-hidden rounded-2xl bg-panel shadow-soft" ref={rootRef}>
       <Toolbar
@@ -639,31 +716,37 @@ export function NoteEditor({
           onPanViewport={onPanViewport}
           onZoomViewportAt={onZoomViewportAt}
           onAddToGraph={handleAddToGraph}
+          onExplainWithGemini={onExplainWithGemini}
         />
 
         {showTextPanel ? (
           <section
+            ref={notesPanelRef}
             className={`absolute z-20 flex min-h-0 max-w-[calc(100%-1.5rem)] flex-col overflow-hidden rounded-xl border border-slate-200 bg-white shadow-2xl ${notesCollapsed ? "h-11" : ""}`}
             style={{
-              left: isPhone ? "12px" : `${(notesPanelPosition ?? getDefaultNotesPanelPosition()).x}px`,
-              right: isPhone ? "12px" : undefined,
-              top: isPhone ? undefined : `${(notesPanelPosition ?? getDefaultNotesPanelPosition()).y}px`,
+              left: isPhone ? "12px" : notesPanelPosition ? `${notesPanelPosition.x}px` : undefined,
+              right: isPhone ? "12px" : notesPanelPosition ? undefined : "12px",
+              top: isPhone ? undefined : notesPanelPosition ? `${notesPanelPosition.y}px` : "12px",
               bottom: isPhone ? "12px" : undefined,
-              width: isPhone ? undefined : `${notesPanelSize.width}px`,
+              width: isPhone ? undefined : `${initialNotesWidth}px`,
               height: notesCollapsed
                 ? undefined
                 : isPhone
                   ? showGraphPanel
-                    ? "44%"
-                    : "52%"
+                    ? "56%"
+                    : "64%"
                   : `${notesPanelSize.height}px`,
               maxHeight: notesCollapsed ? undefined : "calc(100% - 1.5rem)",
-              minHeight: notesCollapsed ? undefined : "220px",
+              minHeight: notesCollapsed ? undefined : "360px",
             }}
           >
             <TextEditor
-              text={safeNote.text}
-              onTextChange={onTextChange}
+              messages={chatMessages}
+              onSendMessage={onSendChatMessage}
+              onStopGenerating={onStopChatGeneration}
+              onClearChat={onClearChat}
+              isSending={isChatSending}
+              errorMessage={chatError}
               onClose={() => onShowTextPanelChange(false)}
               collapsed={notesCollapsed}
               onToggleCollapsed={() => setNotesCollapsed((prev) => !prev)}

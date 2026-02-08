@@ -27,6 +27,7 @@ interface InkCanvasProps {
   onPanViewport: (noteId: string, dx: number, dy: number) => void;
   onZoomViewportAt: (noteId: string, nextScale: number, anchorX: number, anchorY: number) => void;
   onAddToGraph?: (latex: string) => void;
+  onExplainWithGemini?: (recognizedText: string) => Promise<void> | void;
   onExportReady?: (exportFn: () => string) => void;
 }
 
@@ -55,6 +56,7 @@ export function InkCanvas({
   onPanViewport,
   onZoomViewportAt,
   onAddToGraph,
+  onExplainWithGemini,
   onExportReady,
 }: InkCanvasProps): JSX.Element {
   const containerRef = useRef<HTMLDivElement | null>(null);
@@ -80,6 +82,7 @@ export function InkCanvas({
   const [popupPosition, setPopupPosition] = useState<{ x: number; y: number }>({ x: 0, y: 0 });
   const [isSolving, setIsSolving] = useState(false);
   const [isGraphing, setIsGraphing] = useState(false);
+  const [isExplaining, setIsExplaining] = useState(false);
   const [textInput, setTextInput] = useState<{ x: number; y: number; worldX: number; worldY: number } | null>(null);
   const [textValue, setTextValue] = useState("");
   const [loadedImages, setLoadedImages] = useState<Map<string, HTMLImageElement>>(new Map());
@@ -1075,6 +1078,35 @@ export function InkCanvas({
     }
   };
 
+  const handlePopupExplainWithGemini = async () => {
+    const selectedStrokeObjects = note.strokes.filter((stroke) => selectedStrokes.includes(stroke.id));
+    if (selectedStrokeObjects.length === 0) {
+      alert("Select handwritten notes first.");
+      return;
+    }
+    if (!onExplainWithGemini) {
+      return;
+    }
+
+    setIsExplaining(true);
+
+    try {
+      const imageDataUrl = strokesToPngDataUrl(selectedStrokeObjects);
+      const recognizedText = await recognizeEquationForGraph(imageDataUrl);
+      await onExplainWithGemini(recognizedText);
+      setSelectedStrokes([]);
+      setSelectedImages([]);
+      setSelectionBox(null);
+    } catch (error) {
+      console.error("Failed to explain with Gemini:", error);
+      const message = error instanceof Error ? error.message : "Failed to recognize selection";
+      alert(`Could not explain selection.\n\n${message}`);
+    } finally {
+      setIsExplaining(false);
+      setShowPopup(false);
+    }
+  };
+
   const handlePopupClose = () => {
     setShowPopup(false);
   };
@@ -1131,11 +1163,13 @@ export function InkCanvas({
                 position={popupPosition}
                 isSolving={isSolving}
                 isGraphing={isGraphing}
+                isExplaining={isExplaining}
                 onDelete={handlePopupDelete}
                 onDuplicate={handlePopupDuplicate}
                 onChangeColor={handlePopupChangeColor}
                 onSolve={handlePopupSolve}
                 onAddToGraph={handlePopupAddToGraph}
+                onExplainWithGemini={handlePopupExplainWithGemini}
                 onClose={handlePopupClose}
             />
         )}

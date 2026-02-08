@@ -6,6 +6,7 @@ import { requireAuth } from "./middleware/auth.js";
 import notesRouter from "./routes/notes.js";
 import solveRouter from "./routes/solve.js";
 import graphRouter from "./routes/graph.js";
+import chatRouter from "./routes/chat.js";
 
 dotenv.config();
 
@@ -32,6 +33,7 @@ app.get("/health", (req, res) => {
 app.use("/api/notes", requireAuth, notesRouter);
 app.use("/api/solve", solveRouter);
 app.use("/api/graph", graphRouter);
+app.use("/api/chat", requireAuth, chatRouter);
 
 // Error handling middleware
 app.use((err: Error, req: express.Request, res: express.Response, next: express.NextFunction) => {

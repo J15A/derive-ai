@@ -1,15 +1,17 @@
-import { Copy, Trash2, Palette, Calculator, Loader2, LineChart } from "lucide-react";
+import { Bot, Copy, Trash2, Palette, Calculator, Loader2, LineChart } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 
 interface SelectionPopupProps {
   position: { x: number; y: number };
   isSolving?: boolean;
   isGraphing?: boolean;
+  isExplaining?: boolean;
   onDelete: () => void;
   onDuplicate: () => void;
   onChangeColor: (color: string) => void;
   onSolve: () => void;
   onAddToGraph: () => void;
+  onExplainWithGemini: () => void;
   onClose: () => void;
 }
 
@@ -28,11 +30,13 @@ export function SelectionPopup({
   position,
   isSolving = false,
   isGraphing = false,
+  isExplaining = false,
   onDelete, 
   onDuplicate, 
   onChangeColor,
   onSolve,
   onAddToGraph,
+  onExplainWithGemini,
   onClose 
 }: SelectionPopupProps): JSX.Element {
   const popupRef = useRef<HTMLDivElement>(null);
@@ -102,6 +106,16 @@ export function SelectionPopup({
         type="button"
       >
         {isGraphing ? <Loader2 size={18} className="animate-spin" /> : <LineChart size={18} />}
+      </button>
+
+      <button
+        className="flex items-center justify-center rounded-md p-2 text-violet-600 transition-colors hover:bg-violet-50 disabled:opacity-50"
+        onClick={onExplainWithGemini}
+        disabled={isExplaining}
+        title="Explain with Gemini"
+        type="button"
+      >
+        {isExplaining ? <Loader2 size={18} className="animate-spin" /> : <Bot size={18} />}
       </button>
 
       <div className="relative">

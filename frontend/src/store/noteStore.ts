@@ -1,5 +1,14 @@
 import { create } from "zustand";
-import type { InkHistoryAction, InkStroke, InkTool, Note, NoteBundle, TextAnnotation, WhiteboardImage } from "../types";
+import type {
+  ChatMessage,
+  InkHistoryAction,
+  InkStroke,
+  InkTool,
+  Note,
+  NoteBundle,
+  TextAnnotation,
+  WhiteboardImage,
+} from "../types";
 import { strokeIntersectsCircle, strokesToPngDataUrl, uid } from "../utils/ink";
 
 const now = () => Date.now();
@@ -10,6 +19,7 @@ function createNote(title = "Untitled Note"): Note {
     id: uid(),
     title,
     text: "",
+    chatMessages: [],
     strokes: [],
     images: [],
     undoneStrokes: [],
@@ -45,6 +55,11 @@ interface NoteState {
   setActiveTab: (tab: "ink" | "text") => void;
   updateNoteTitle: (title: string) => void;
   updateNoteText: (text: string) => void;
+  addUserChatMessage: (noteId: string, content: string) => ChatMessage;
+  addAssistantChatMessage: (noteId: string, content: string) => ChatMessage;
+  updateChatMessageContent: (noteId: string, messageId: string, content: string) => void;
+  removeChatMessage: (noteId: string, messageId: string) => void;
+  clearChatMessages: (noteId: string) => void;
   setTool: (tool: InkTool) => void;
   setColor: (color: string) => void;
   setPenSize: (size: number) => void;
@@ -119,6 +134,11 @@ export const useNoteStore = create<NoteState>((set, get) => ({
   setNotes: (notes) => {
     const normalized = notes.map((note) => ({
       ...note,
+      text: note.text ?? "",
+      chatMessages: note.chatMessages ?? [],
+      strokes: note.strokes ?? [],
+      images: note.images ?? [],
+      undoneStrokes: note.undoneStrokes ?? [],
       textAnnotations: note.textAnnotations ?? [],
       undoHistory: [],
       redoHistory: [],
@@ -192,6 +212,94 @@ export const useNoteStore = create<NoteState>((set, get) => ({
     set((state) => ({
       notes: state.notes.map((note) =>
         note.id === selectedId ? { ...note, text, updatedAt: now() } : note,
+      ),
+    }));
+  },
+  addUserChatMessage: (noteId, content) => {
+    const message: ChatMessage = {
+      id: uid(),
+      role: "user",
+      content: content.trim(),
+      createdAt: now(),
+    };
+    set((state) => ({
+      notes: state.notes.map((note) =>
+        note.id === noteId
+          ? {
+              ...note,
+              chatMessages: [...(note.chatMessages ?? []), message],
+              updatedAt: now(),
+            }
+          : note,
+      ),
+    }));
+    return message;
+  },
+  addAssistantChatMessage: (noteId, content) => {
+    const message: ChatMessage = {
+      id: uid(),
+      role: "assistant",
+      content: content.trim(),
+      createdAt: now(),
+    };
+    set((state) => ({
+      notes: state.notes.map((note) =>
+        note.id === noteId
+          ? {
+              ...note,
+              chatMessages: [...(note.chatMessages ?? []), message],
+              updatedAt: now(),
+            }
+          : note,
+      ),
+    }));
+    return message;
+  },
+  updateChatMessageContent: (noteId, messageId, content) => {
+    set((state) => ({
+      notes: state.notes.map((note) => {
+        if (note.id !== noteId) {
+          return note;
+        }
+        return {
+          ...note,
+          chatMessages: (note.chatMessages ?? []).map((message) =>
+            message.id === messageId
+              ? {
+                  ...message,
+                  content,
+                }
+              : message,
+          ),
+          updatedAt: now(),
+        };
+      }),
+    }));
+  },
+  removeChatMessage: (noteId, messageId) => {
+    set((state) => ({
+      notes: state.notes.map((note) => {
+        if (note.id !== noteId) {
+          return note;
+        }
+        return {
+          ...note,
+          chatMessages: (note.chatMessages ?? []).filter((message) => message.id !== messageId),
+          updatedAt: now(),
+        };
+      }),
+    }));
+  },
+  clearChatMessages: (noteId) => {
+    set((state) => ({
+      notes: state.notes.map((note) =>
+        note.id === noteId
+          ? {
+              ...note,
+              chatMessages: [],
+              updatedAt: now(),
+            }
+          : note,
       ),
     }));
   },
@@ -380,11 +488,19 @@ export const useNoteStore = create<NoteState>((set, get) => ({
               })),
             };
           });
+        const actionTimestamp = now();
+        const historyAction: InkHistoryAction = {
+          type: "addStroke",
+          strokes: duplicates,
+          timestamp: actionTimestamp,
+        };
         return {
           ...note,
           strokes: [...note.strokes, ...duplicates],
           undoneStrokes: [],
-          updatedAt: now(),
+          undoHistory: [...(note.undoHistory ?? []), historyAction],
+          redoHistory: [],
+          updatedAt: actionTimestamp,
         };
       }),
     }));
@@ -808,6 +924,7 @@ export const useNoteStore = create<NoteState>((set, get) => ({
       id: uid(),
       title: bundle.note.title || "Imported Note",
       text: bundle.note.text || "",
+      chatMessages: [],
       strokes: bundle.note.strokes || [],
       images: bundle.note.images || [],
       undoneStrokes: [],
