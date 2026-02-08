@@ -1263,8 +1263,16 @@ export function InkCanvas({
       // Render selected strokes to a PNG image
       const imageDataUrl = strokesToPngDataUrl(selectedStrokeObjects);
 
-      // Send to backend via API
-      const result = await solveEquation(imageDataUrl);
+      // Calculate average stroke size to send to backend
+      let totalSize = 0;
+      for (const stroke of selectedStrokeObjects) {
+        totalSize += stroke.baseSize;
+      }
+      const avgStrokeSize = totalSize / selectedStrokeObjects.length;
+      const inputFontSize = Math.max(16, avgStrokeSize * 10);
+
+      // Send to backend via API with font size information
+      const { result, fontSize: outputFontSize } = await solveEquation(imageDataUrl, inputFontSize);
 
       // Check if equation was not recognized
       if (result.toLowerCase().includes("could not recognize")) {
@@ -1273,15 +1281,13 @@ export function InkCanvas({
         return;
       }
 
-      // Calculate position and size based on the selection bounding box
+      // Calculate position based on the selection bounding box
       let minX = Infinity;
       let minY = Infinity;
       let maxX = -Infinity;
       let maxY = -Infinity;
-      let totalSize = 0;
 
       for (const stroke of selectedStrokeObjects) {
-        totalSize += stroke.baseSize;
         for (const p of stroke.points) {
           minX = Math.min(minX, p.x);
           minY = Math.min(minY, p.y);
@@ -1290,21 +1296,35 @@ export function InkCanvas({
         }
       }
 
-      // Calculate average stroke size and use it for font size (much larger)
-      const avgStrokeSize = totalSize / selectedStrokeObjects.length;
-      const fontSize = Math.max(80, avgStrokeSize * 15); // Much bigger: at least 80px, scale 15x with stroke size
-      const textY = maxY + fontSize * 0.3; // Add spacing proportional to font size
-
-      const annotation: TextAnnotation = {
-        id: uid(),
-        x: minX,
-        y: textY,
-        text: result,
-        fontSize,
-        color: "#3B82F6",
-      };
-
-      onAddTextAnnotation(note.id, annotation);
+      // Use the fontSize returned from the backend (2x the input)
+      const fontSize = outputFontSize;
+      
+      // Split result by newlines to create separate images for each step
+      // Skip the first line as it's usually a repeat of the input
+      const lines = result.split('\n').filter(line => line.trim()).slice(1);
+      
+      // Start positioning right after the input equation with small padding
+      // currentTop tracks where the top of the next image should be
+      const stepPadding = 8; // Small padding between steps for readability
+      let currentTop = maxY + stepPadding;
+      
+      // Render each line as a separate image
+      for (const line of lines) {
+        // Render the image with center Y positioned so that top = currentTop
+        // Since textToImage does: y = centerY - height/2
+        // We need to provide a centerY first, then adjust the image.y after
+        const tempImage = await textToImage(line, minX, currentTop, fontSize, "#000000");
+        if (!tempImage) continue;
+        
+        // Override the y position to ensure top is exactly at currentTop
+        // textToImage centers vertically, so we need to adjust
+        tempImage.y = currentTop;
+        
+        onAddImage(note.id, tempImage);
+        
+        // Update currentTop to this image's bottom plus padding for next iteration
+        currentTop = tempImage.y + tempImage.height + stepPadding;
+      }
 
       // Force immediate redraw to show the solution
       scheduleDraw();

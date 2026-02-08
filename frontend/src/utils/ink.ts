@@ -131,7 +131,7 @@ export function strokeIntersectsCircle(
 }
 
 export function strokesToPngDataUrl(strokes: InkStroke[]): string {
-  const padding = 24;
+  const padding = 40; // Increased padding for better context
   let minX = Infinity;
   let minY = Infinity;
   let maxX = -Infinity;
@@ -153,8 +153,12 @@ export function strokesToPngDataUrl(strokes: InkStroke[]): string {
     maxY = 900;
   }
 
-  const width = Math.max(1200, Math.ceil(maxX - minX + padding * 2));
-  const height = Math.max(900, Math.ceil(maxY - minY + padding * 2));
+  // Use higher resolution for better OCR (2x scale factor)
+  const scaleFactor = 2;
+  const baseWidth = Math.max(800, Math.ceil(maxX - minX + padding * 2));
+  const baseHeight = Math.max(600, Math.ceil(maxY - minY + padding * 2));
+  const width = baseWidth * scaleFactor;
+  const height = baseHeight * scaleFactor;
 
   const canvas = document.createElement("canvas");
   canvas.width = width;
@@ -165,15 +169,56 @@ export function strokesToPngDataUrl(strokes: InkStroke[]): string {
     return "";
   }
 
+  // Enable high-quality rendering
+  ctx.imageSmoothingEnabled = true;
+  ctx.imageSmoothingQuality = "high";
+
+  // Fill with white background
   ctx.fillStyle = "#ffffff";
   ctx.fillRect(0, 0, width, height);
+
+  // Apply scaling
+  ctx.save();
+  ctx.scale(scaleFactor, scaleFactor);
 
   const ox = -minX + padding;
   const oy = -minY + padding;
 
+  // Draw strokes with anti-aliasing
   for (const stroke of strokes) {
-    drawStrokePolygon(ctx, strokePolygon(stroke), stroke.color, ox, oy);
+    // Convert colored strokes to black for better OCR
+    const ocrColor = "#000000";
+    drawStrokePolygon(ctx, strokePolygon(stroke), ocrColor, ox, oy);
   }
+
+  ctx.restore();
+
+  // Get image data for preprocessing
+  const imageData = ctx.getImageData(0, 0, width, height);
+  const data = imageData.data;
+
+  // Apply contrast enhancement and ensure clean black/white
+  for (let i = 0; i < data.length; i += 4) {
+    const r = data[i];
+    const g = data[i + 1];
+    const b = data[i + 2];
+    
+    // Convert to grayscale
+    const gray = 0.299 * r + 0.587 * g + 0.114 * b;
+    
+    // Apply threshold with slight contrast boost
+    // Values below 250 are considered ink, make them pure black
+    // Values above 250 are background, make them pure white
+    const threshold = 250;
+    const value = gray < threshold ? 0 : 255;
+    
+    data[i] = value;     // R
+    data[i + 1] = value; // G
+    data[i + 2] = value; // B
+    // Alpha stays the same
+  }
+
+  ctx.putImageData(imageData, 0, 0);
 
   return canvas.toDataURL("image/png");
 }

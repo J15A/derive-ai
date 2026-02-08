@@ -415,14 +415,30 @@ export const useNoteStore = create<NoteState>((set, get) => ({
           return (distanceX * distanceX + distanceY * distanceY) > radius * radius;
         });
 
-        // Filter out shapes that intersect with the eraser
-        const filteredShapes = note.shapes.filter((shape) => {
-          return !shapeIntersectsCircle(shape, x, y, radius);
+        const filteredAnnotations = (note.textAnnotations ?? []).filter(
+          (annotation) => !erasedAnnotations.some((erased) => erased.id === annotation.id),
+        );
+        
+        // Filter out images that intersect with the eraser
+        const erasedImages = (note.images ?? []).filter((image) => {
+          // Check if eraser circle intersects with image bounding box
+          const closestX = Math.max(image.x, Math.min(x, image.x + image.width));
+          const closestY = Math.max(image.y, Math.min(y, image.y + image.height));
+          
+          const distanceX = x - closestX;
+          const distanceY = y - closestY;
+          const distanceSquared = distanceX * distanceX + distanceY * distanceY;
+          
+          return distanceSquared <= radius * radius;
         });
 
-        if (filteredStrokes.length === note.strokes.length &&
+        const filteredImages = (note.images ?? []).filter(
+          (image) => !erasedImages.some((erased) => erased.id === image.id),
+        );
+        
+        if (filteredStrokes.length === note.strokes.length && 
             filteredAnnotations.length === (note.textAnnotations ?? []).length &&
-            filteredShapes.length === note.shapes.length) {
+            filteredImages.length === (note.images ?? []).length) {
           return note;
         }
 
@@ -438,9 +454,9 @@ export const useNoteStore = create<NoteState>((set, get) => ({
           strokes: filteredStrokes,
           shapes: filteredShapes,
           textAnnotations: filteredAnnotations,
-          undoHistory: shouldMerge
-            ? [...note.undoHistory.slice(0, -1), action]
-            : [...note.undoHistory, action],
+          images: filteredImages,
+          undoneStrokes: [],
+          undoHistory: nextUndoHistory,
           redoHistory: [],
           updatedAt: ts,
         };

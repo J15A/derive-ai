@@ -125,13 +125,13 @@ export async function deleteNote(id: string): Promise<void> {
   }
 }
 
-export async function solveEquation(imageDataUrl: string): Promise<string> {
+export async function solveEquation(imageDataUrl: string, fontSize = 16): Promise<{ result: string; fontSize: number }> {
   const response = await fetch(`${API_BASE_URL}/solve`, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
     },
-    body: JSON.stringify({ imageDataUrl }),
+    body: JSON.stringify({ imageDataUrl, fontSize }),
   });
 
   if (!response.ok) {
@@ -139,8 +139,8 @@ export async function solveEquation(imageDataUrl: string): Promise<string> {
     throw new Error((body as { error?: string }).error || `Failed to solve equation: ${response.statusText}`);
   }
 
-  const data = (await response.json()) as { result: string };
-  return data.result;
+  const data = (await response.json()) as { result: string; fontSize: number };
+  return data;
 }
 
 export async function recognizeEquationForGraph(imageDataUrl: string): Promise<string> {

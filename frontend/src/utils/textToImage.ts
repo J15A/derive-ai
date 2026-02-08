@@ -2,6 +2,56 @@ import katex from "katex";
 import type { WhiteboardImage } from "../types";
 import { uid } from "./ink";
 
+// ─── Auto-crop helper ───────────────────────────────────────────────────────────
+/**
+ * Crop a canvas by removing all transparent pixels around the content.
+ * Returns a new canvas with tight bounds based on alpha channel.
+ */
+function autoCropCanvas(canvas: HTMLCanvasElement): HTMLCanvasElement {
+  const ctx = canvas.getContext("2d");
+  if (!ctx) return canvas;
+
+  const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+  const pixels = imageData.data;
+  let minX = canvas.width;
+  let minY = canvas.height;
+  let maxX = 0;
+  let maxY = 0;
+
+  // Find bounds by scanning alpha channel
+  for (let y = 0; y < canvas.height; y++) {
+    for (let x = 0; x < canvas.width; x++) {
+      const alpha = pixels[(y * canvas.width + x) * 4 + 3];
+      if (alpha > 0) {
+        if (x < minX) minX = x;
+        if (x > maxX) maxX = x;
+        if (y < minY) minY = y;
+        if (y > maxY) maxY = y;
+      }
+    }
+  }
+
+  // If no content found, return original
+  if (minX > maxX || minY > maxY) return canvas;
+
+  // Create cropped canvas
+  const width = maxX - minX + 1;
+  const height = maxY - minY + 1;
+  const croppedCanvas = document.createElement("canvas");
+  croppedCanvas.width = width;
+  croppedCanvas.height = height;
+  const croppedCtx = croppedCanvas.getContext("2d");
+  if (!croppedCtx) return canvas;
+
+  croppedCtx.drawImage(
+    canvas,
+    minX, minY, width, height,
+    0, 0, width, height
+  );
+
+  return croppedCanvas;
+}
+
 // ─── CSS / font embedding cache ────────────────────────────────────────────────
 // SVG foreignObject runs in an isolated rendering context — it can't see the
 // page's stylesheets or @font-face rules.  We extract the full KaTeX CSS (with
@@ -176,8 +226,8 @@ function renderTextToDataUrl(
   ctx.font = `${fontSize * dpr}px ${fontFamily}`;
   const metrics = ctx.measureText(text);
 
-  const width = Math.ceil(metrics.width) + 4;
-  const height = Math.ceil(fontSize * dpr * 1.4) + 4;
+  const width = Math.ceil(metrics.width);
+  const height = Math.ceil(fontSize * dpr * 1.4);
   canvas.width = width;
   canvas.height = height;
 
@@ -185,12 +235,15 @@ function renderTextToDataUrl(
   ctx.font = `${fontSize * dpr}px ${fontFamily}`;
   ctx.textBaseline = "top";
   ctx.fillStyle = color;
-  ctx.fillText(text, 2, fontSize * dpr * 0.15);
+  ctx.fillText(text, 0, fontSize * dpr * 0.15);
+
+  // Auto-crop to remove transparent pixels
+  const croppedCanvas = autoCropCanvas(canvas);
 
   return {
-    dataUrl: canvas.toDataURL("image/png"),
-    width: width / dpr,
-    height: height / dpr,
+    dataUrl: croppedCanvas.toDataURL("image/png"),
+    width: croppedCanvas.width / dpr,
+    height: croppedCanvas.height / dpr,
   };
 }
 
@@ -259,7 +312,7 @@ async function renderLatexToDataUrl(
     }
 
     const dpr = 2;
-    const padding = 8;
+    const padding = 4; // Small padding to prevent clipping of radicals and tall symbols
     const canvasW = (width + padding * 2) * dpr;
     const canvasH = (height + padding * 2) * dpr;
 
@@ -294,7 +347,7 @@ async function renderLatexToDataUrl(
     }
 
     // Override KaTeX font-families to prefer handwriting, but keep
-    // KaTeX_Size fonts as-is for large delimiters/brackets/integrals,
+    // KaTeX_Size fonts as-is for large delimiters/brackets/integrals/radicals,
     // and keep KaTeX_AMS for special symbols.
     embeddedCss += `
       .katex { font-family: ${HANDWRITING_FONT}, KaTeX_Main, Times New Roman, serif !important; }
@@ -303,6 +356,9 @@ async function renderLatexToDataUrl(
       .katex .mathrm { font-family: ${HANDWRITING_FONT}, KaTeX_Main, serif !important; }
       .katex .textrm { font-family: ${HANDWRITING_FONT}, KaTeX_Main, serif !important; }
       .katex .mainrm { font-family: ${HANDWRITING_FONT}, KaTeX_Main, serif !important; }
+      .katex .sqrt { font-family: KaTeX_Main, serif !important; }
+      .katex .sqrt > .root { font-family: KaTeX_Main, serif !important; }
+      .katex .sqrt > .vlist { font-family: KaTeX_Main, serif !important; }
     `;
 
     const styleEl = document.createElementNS(svgNS, "style");
@@ -385,10 +441,14 @@ async function renderLatexToDataUrl(
       const img = new Image();
       img.onload = () => {
         ctx.drawImage(img, 0, 0);
+        
+        // Auto-crop the canvas to remove transparent pixels
+        const croppedCanvas = autoCropCanvas(canvas);
+        
         resolve({
-          dataUrl: canvas.toDataURL("image/png"),
-          width: (width + padding * 2),
-          height: (height + padding * 2),
+          dataUrl: croppedCanvas.toDataURL("image/png"),
+          width: croppedCanvas.width / dpr,
+          height: croppedCanvas.height / dpr,
         });
       };
       img.onerror = () => resolve(null);
@@ -466,13 +526,16 @@ export async function textToImage(
     offsetX += r.width;
   }
 
+  // Crop the composite canvas based on alpha channel to get tight bounding box
+  const croppedCanvas = autoCropCanvas(compositeCanvas);
+
   return {
     id: uid(),
-    dataUrl: compositeCanvas.toDataURL("image/png"),
+    dataUrl: croppedCanvas.toDataURL("image/png"),
     x,
-    y: y - maxHeight / 2, // center vertically at click point
-    width: totalWidth,
-    height: maxHeight,
+    y: y - croppedCanvas.height / (2 * dpr), // center vertically at click point using cropped height
+    width: croppedCanvas.width / dpr,
+    height: croppedCanvas.height / dpr,
     createdAt: Date.now(),
   };
 }
