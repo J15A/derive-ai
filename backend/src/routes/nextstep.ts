@@ -1,5 +1,5 @@
 import { Router, Request, Response } from "express";
-import { RECOGNITION_MODEL } from "./solve";
+import { RECOGNITION_MODEL } from "./solve.js";
 
 const router = Router();
 
