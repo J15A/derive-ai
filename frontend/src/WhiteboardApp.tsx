@@ -1,22 +1,16 @@
 import { useCallback, useEffect, useMemo, useRef, useState, useTransition } from "react";
-import { useAuth0 } from "@auth0/auth0-react";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import { NoteEditor } from "./components/NoteEditor";
 import { Sidebar } from "./components/Sidebar";
 import {
-  createNote as createNoteInDb,
-  deleteNote as deleteNoteInDb,
-  loadNotesFromDb,
-  saveNotesToDb,
   sendChatMessageStream,
-  setAccessTokenProvider,
 } from "./api/client";
 import { useNoteStore } from "./store/noteStore";
 
 const UI_SETTINGS_KEY = "deriveAiUiSettings";
+const LOCAL_NOTES_KEY = "deriveAiLocalNotes";
 
 export default function WhiteboardApp(): JSX.Element {
-  const { user, logout, getAccessTokenSilently } = useAuth0();
   const {
     notes,
     selectedNoteId,
@@ -97,25 +91,16 @@ export default function WhiteboardApp(): JSX.Element {
   const chatAbortRef = useRef<AbortController | null>(null);
 
   const handleCreateNote = useCallback(() => {
-    const note = createNote();
-    void createNoteInDb(note).catch((error) => {
-      console.error("Failed to create note in database:", error);
-    });
+    createNote();
     if (isPhone) {
       setSidebarCollapsed(true);
     }
   }, [createNote, isPhone]);
 
   const handleDeleteNote = useCallback((id: string) => {
-    void deleteNoteInDb(id)
-      .then(() => {
-        startTransition(() => {
-          deleteNote(id);
-        });
-      })
-      .catch((error) => {
-        console.error("Failed to delete note from database:", error);
-      });
+    startTransition(() => {
+      deleteNote(id);
+    });
   }, [deleteNote, startTransition]);
 
   const handleSendChatMessage = useCallback(async (content: string) => {
@@ -207,16 +192,6 @@ export default function WhiteboardApp(): JSX.Element {
   }, [handleSendChatMessage, setShowTextPanel, showTextPanel]);
 
   useEffect(() => {
-    setAccessTokenProvider(() =>
-      getAccessTokenSilently({
-        authorizationParams: {
-          audience: import.meta.env.VITE_AUTH0_AUDIENCE,
-        },
-      }),
-    );
-  }, [getAccessTokenSilently]);
-
-  useEffect(() => {
     const raw = window.localStorage.getItem(UI_SETTINGS_KEY);
     if (!raw) {
       setUiSettingsReady(true);
@@ -281,22 +256,26 @@ export default function WhiteboardApp(): JSX.Element {
   }, [color, highlighterColor, showGrid, showTextPanel, penSize, highlighterSize, tool, uiSettingsReady]);
 
   useEffect(() => {
-    let cancelled = false;
-
-    const loadNotes = async () => {
-      const loaded = await loadNotesFromDb();
-      if (cancelled) {
-        return;
-      }
-      setNotes(loaded);
+    const raw = window.localStorage.getItem(LOCAL_NOTES_KEY);
+    if (!raw) {
+      setNotes([]);
       setHydrated(true);
-    };
+      return;
+    }
 
-    void loadNotes();
-
-    return () => {
-      cancelled = true;
-    };
+    try {
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed)) {
+        setNotes(parsed);
+      } else {
+        setNotes([]);
+      }
+    } catch (error: unknown) {
+      console.error("Failed to load notes from local storage", error);
+      setNotes([]);
+    } finally {
+      setHydrated(true);
+    }
   }, [setHydrated, setNotes]);
 
   useEffect(() => {
@@ -309,10 +288,12 @@ export default function WhiteboardApp(): JSX.Element {
     }
 
     saveTimerRef.current = window.setTimeout(() => {
-      void saveNotesToDb(notes).catch((error) => {
-        console.error("Failed to auto-save notes to database:", error);
-      });
-    }, 450);
+      try {
+        window.localStorage.setItem(LOCAL_NOTES_KEY, JSON.stringify(notes));
+      } catch (error: unknown) {
+        console.error("Failed to save notes to local storage", error);
+      }
+    }, 250);
 
     return () => {
       if (saveTimerRef.current !== null) {
@@ -402,17 +383,10 @@ export default function WhiteboardApp(): JSX.Element {
               notes={notes}
               selectedNoteId={selectedNote?.id ?? null}
               searchQuery={searchQuery}
-              userLabel={user?.email || user?.name || "Signed in"}
+              userLabel="Local mode"
               onGoHome={() => {
                 window.location.href = "/";
               }}
-              onLogout={() =>
-                logout({
-                  logoutParams: {
-                    returnTo: window.location.origin,
-                  },
-                })
-              }
               isCollapsed={sidebarCollapsed}
               onSearch={setSearchQuery}
               onSelect={(id) => {
@@ -436,17 +410,10 @@ export default function WhiteboardApp(): JSX.Element {
               notes={notes}
               selectedNoteId={selectedNote?.id ?? null}
               searchQuery={searchQuery}
-              userLabel={user?.email || user?.name || "Signed in"}
+              userLabel="Local mode"
               onGoHome={() => {
                 window.location.href = "/";
               }}
-              onLogout={() =>
-                logout({
-                  logoutParams: {
-                    returnTo: window.location.origin,
-                  },
-                })
-              }
               isCollapsed={false}
               onSearch={setSearchQuery}
               onSelect={(id) => {

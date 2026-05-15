@@ -2,7 +2,6 @@ import express from "express";
 import cors from "cors";
 import dotenv from "dotenv";
 import { connectToDatabase, closeDatabase } from "./mongodb.js";
-import { requireAuth } from "./middleware/auth.js";
 import notesRouter from "./routes/notes.js";
 import solveRouter from "./routes/solve.js";
 import nextstepRouter from "./routes/nextstep.js";
@@ -33,13 +32,13 @@ app.get("/health", (req, res) => {
 });
 
 // Routes
-app.use("/api/notes", requireAuth, notesRouter);
+app.use("/api/notes", notesRouter);
 app.use("/api/solve", solveRouter);
 app.use("/api/nextstep", nextstepRouter);
 app.use("/api/graph", graphRouter);
 app.use("/api/recognize", recognizeRouter);
 app.use("/api/check", checkRouter);
-app.use("/api/chat", requireAuth, chatRouter);
+app.use("/api/chat", chatRouter);
 
 // Error handling middleware
 app.use((err: Error, req: express.Request, res: express.Response, next: express.NextFunction) => {

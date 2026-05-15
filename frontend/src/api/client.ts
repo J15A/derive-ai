@@ -10,30 +10,9 @@ import type { ChatRole, Note } from "../types";
 
 const API_BASE_URL = import.meta.env.VITE_API_URL || "http://localhost:3001/api";
 
-type AccessTokenProvider = () => Promise<string>;
-
-let accessTokenProvider: AccessTokenProvider | null = null;
-
-export function setAccessTokenProvider(provider: AccessTokenProvider | null): void {
-  accessTokenProvider = provider;
-}
-
-async function buildAuthHeaders(baseHeaders: Record<string, string> = {}): Promise<Record<string, string>> {
-  if (!accessTokenProvider) {
-    return baseHeaders;
-  }
-
-  const token = await accessTokenProvider();
-  return {
-    ...baseHeaders,
-    Authorization: `Bearer ${token}`,
-  };
-}
-
 export async function loadNotesFromDb(): Promise<Note[]> {
   try {
-    const headers = await buildAuthHeaders();
-    const response = await fetch(`${API_BASE_URL}/notes`, { headers });
+    const response = await fetch(`${API_BASE_URL}/notes`);
     if (!response.ok) {
       throw new Error(`Failed to load notes: ${response.statusText}`);
     }
@@ -46,12 +25,11 @@ export async function loadNotesFromDb(): Promise<Note[]> {
 
 export async function saveNotesToDb(notes: Note[]): Promise<void> {
   try {
-    const headers = await buildAuthHeaders({
-      "Content-Type": "application/json",
-    });
     const response = await fetch(`${API_BASE_URL}/notes/bulk`, {
       method: "POST",
-      headers,
+      headers: {
+        "Content-Type": "application/json",
+      },
       body: JSON.stringify(notes),
     });
     
@@ -66,12 +44,11 @@ export async function saveNotesToDb(notes: Note[]): Promise<void> {
 
 export async function createNote(note: Note): Promise<Note> {
   try {
-    const headers = await buildAuthHeaders({
-      "Content-Type": "application/json",
-    });
     const response = await fetch(`${API_BASE_URL}/notes`, {
       method: "POST",
-      headers,
+      headers: {
+        "Content-Type": "application/json",
+      },
       body: JSON.stringify(note),
     });
     
@@ -88,12 +65,11 @@ export async function createNote(note: Note): Promise<Note> {
 
 export async function updateNote(id: string, updates: Partial<Note>): Promise<Note> {
   try {
-    const headers = await buildAuthHeaders({
-      "Content-Type": "application/json",
-    });
     const response = await fetch(`${API_BASE_URL}/notes/${id}`, {
       method: "PUT",
-      headers,
+      headers: {
+        "Content-Type": "application/json",
+      },
       body: JSON.stringify(updates),
     });
     
@@ -110,10 +86,8 @@ export async function updateNote(id: string, updates: Partial<Note>): Promise<No
 
 export async function deleteNote(id: string): Promise<void> {
   try {
-    const headers = await buildAuthHeaders();
     const response = await fetch(`${API_BASE_URL}/notes/${id}`, {
       method: "DELETE",
-      headers,
     });
     
     if (!response.ok) {
@@ -239,13 +213,11 @@ interface SendChatMessageStreamOptions {
 }
 
 export async function sendChatMessage(payload: SendChatMessageRequest): Promise<string> {
-  const headers = await buildAuthHeaders({
-    "Content-Type": "application/json",
-  });
-
   const response = await fetch(`${API_BASE_URL}/chat`, {
     method: "POST",
-    headers,
+    headers: {
+      "Content-Type": "application/json",
+    },
     body: JSON.stringify(payload),
   });
 
@@ -262,13 +234,11 @@ export async function sendChatMessageStream(
   payload: SendChatMessageRequest,
   options: SendChatMessageStreamOptions,
 ): Promise<void> {
-  const headers = await buildAuthHeaders({
-    "Content-Type": "application/json",
-  });
-
   const response = await fetch(`${API_BASE_URL}/chat?stream=true`, {
     method: "POST",
-    headers,
+    headers: {
+      "Content-Type": "application/json",
+    },
     body: JSON.stringify(payload),
     signal: options.signal,
   });

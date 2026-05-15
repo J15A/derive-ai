@@ -1,5 +1,3 @@
-import { useAuth0 } from "@auth0/auth0-react";
-import { motion, useReducedMotion } from "framer-motion";
 import { Link } from "react-router-dom";
 import { useEffect, useRef, useState } from "react";
 
@@ -13,7 +11,7 @@ const techStack = [
   { name: "Gemini", logo: "https://www.google.com/s2/favicons?domain=gemini.google.com&sz=128" },
   { name: "OpenRouter", logo: "https://www.google.com/s2/favicons?domain=openrouter.ai&sz=128" },
   { name: "Desmos", logo: "https://www.google.com/s2/favicons?domain=desmos.com&sz=128" },
-  { name: "Auth0", logo: "https://www.google.com/s2/favicons?domain=auth0.com&sz=128" },
+  { name: "MongoDB", logo: "https://www.google.com/s2/favicons?domain=mongodb.com&sz=128" },
 ];
 
 function CurveIcon(): JSX.Element {
@@ -37,8 +35,6 @@ function CompassIcon(): JSX.Element {
 }
 
 export default function LandingPage(): JSX.Element {
-  const { isAuthenticated, logout } = useAuth0();
-  const reduceMotion = useReducedMotion();
   const activeStrokeRef = useRef<Array<{ x: number; y: number }>>([]);
   const drawingRef = useRef(false);
   const activePointerIdRef = useRef<number | null>(null);
@@ -123,11 +119,6 @@ export default function LandingPage(): JSX.Element {
     }, 1400);
   };
 
-  const sectionVariant = {
-    hidden: { opacity: 0, y: reduceMotion ? 0 : 16 },
-    show: { opacity: 1, y: 0, transition: { duration: 0.45, ease: "easeOut" as const } },
-  };
-
   const isInteractiveTarget = (target: EventTarget | null): boolean => {
     if (!(target instanceof Element)) {
       return false;
@@ -180,7 +171,7 @@ export default function LandingPage(): JSX.Element {
         aria-hidden="true"
       >
         {strokes.map((stroke) => (
-          <motion.polyline
+          <polyline
             key={stroke.id}
             points={stroke.points.map((point) => `${point.x},${point.y}`).join(" ")}
             fill="none"
@@ -188,9 +179,7 @@ export default function LandingPage(): JSX.Element {
             strokeWidth="3"
             strokeLinecap="round"
             strokeLinejoin="round"
-            initial={{ opacity: 1 }}
-            animate={{ opacity: stroke.active ? 1 : 0 }}
-            transition={{ duration: stroke.active ? 0 : 1.15, ease: "easeOut" }}
+            opacity={stroke.active ? 1 : 0.3}
           />
         ))}
       </svg>
@@ -206,45 +195,20 @@ export default function LandingPage(): JSX.Element {
             <a href="#demo" className="hover:text-slate-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-500">Demo</a>
           </div>
           <div className="flex items-center gap-2">
-            {!isAuthenticated ? (
-              <>
-                <Link
-                  to="/login"
-                  className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-500"
-                  aria-label="Log in"
-                >
-                  Login
-                </Link>
-                <Link
-                  to="/signup"
-                  className="rounded-lg bg-cyan-600 px-3 py-2 text-sm font-semibold text-white transition hover:bg-cyan-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-500"
-                  aria-label="Sign up"
-                >
-                  Sign Up
-                </Link>
-              </>
-            ) : (
-              <button
-                type="button"
-                className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-500"
-                onClick={() =>
-                  logout({
-                    logoutParams: {
-                      returnTo: window.location.origin,
-                    },
-                  })
-                }
-              >
-                Log Out
-              </button>
-            )}
+            <Link
+              to="/app"
+              className="rounded-lg bg-cyan-600 px-3 py-2 text-sm font-semibold text-white transition hover:bg-cyan-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-500"
+              aria-label="Open app"
+            >
+              Open App
+            </Link>
           </div>
         </nav>
       </header>
 
       <main className="relative z-10">
         <section className="mx-auto grid w-full max-w-6xl grid-cols-1 items-center gap-12 px-5 pb-20 pt-16 lg:grid-cols-[1.1fr_0.9fr]">
-          <motion.div initial="hidden" animate="show" variants={sectionVariant}>
+          <div>
             <p className="mb-4 inline-flex rounded-full border border-cyan-200 bg-cyan-50 px-3 py-1 text-xs font-semibold uppercase tracking-wide text-cyan-700">
               AI math workspace
             </p>
@@ -256,21 +220,12 @@ export default function LandingPage(): JSX.Element {
               Derive AI combines freeform math whiteboarding with intelligent derivations, explanations, and checks, so you can move from messy ideas to clear solutions quickly.
             </p>
             <div className="mt-8 flex flex-wrap gap-3">
-              {isAuthenticated ? (
-                <Link
-                  to="/app"
-                  className="rounded-lg bg-slate-900 px-5 py-3 text-sm font-semibold text-white transition hover:bg-slate-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-500"
-                >
-                  Launch Whiteboard
-                </Link>
-              ) : (
-                <Link
-                  to="/login"
-                  className="rounded-lg bg-slate-900 px-5 py-3 text-sm font-semibold text-white transition hover:bg-slate-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-500"
-                >
-                  Login to Launch
-                </Link>
-              )}
+              <Link
+                to="/app"
+                className="rounded-lg bg-slate-900 px-5 py-3 text-sm font-semibold text-white transition hover:bg-slate-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-500"
+              >
+                Launch Whiteboard
+              </Link>
               <a
                 href="#about"
                 className="rounded-lg border border-slate-300 bg-white px-5 py-3 text-sm font-semibold text-slate-700 transition hover:bg-slate-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-500"
@@ -278,14 +233,9 @@ export default function LandingPage(): JSX.Element {
                 Learn more
               </a>
             </div>
-          </motion.div>
+          </div>
 
-          <motion.div
-            initial={{ opacity: 0, y: reduceMotion ? 0 : 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.5, ease: "easeOut" }}
-            className="relative rounded-2xl border border-slate-200 bg-white p-6 shadow-lg"
-          >
+          <div className="relative rounded-2xl border border-slate-200 bg-white p-6 shadow-lg">
             <div className="mb-4 flex items-center justify-between" id="demo">
               <div className="flex items-center gap-2 text-slate-700">
                 <CurveIcon />
@@ -293,10 +243,7 @@ export default function LandingPage(): JSX.Element {
               </div>
               <CompassIcon />
             </div>
-            <motion.div
-              whileHover={reduceMotion ? {} : { scale: 1.01 }}
-              className="group relative overflow-hidden rounded-xl border border-slate-200 bg-slate-100"
-            >
+            <div className="group relative overflow-hidden rounded-xl border border-slate-200 bg-slate-100">
               <div className="aspect-video w-full bg-[linear-gradient(135deg,#e2e8f0,#cbd5e1)]" />
               <div className="absolute inset-0 flex items-center justify-center">
                 <div className="rounded-full bg-black/55 p-4 text-white transition group-hover:bg-black/70">
@@ -306,17 +253,13 @@ export default function LandingPage(): JSX.Element {
               <div className="absolute bottom-0 left-0 right-0 bg-black/50 px-3 py-2 text-xs text-white">
                 Demo placeholder: hover to preview interaction
               </div>
-            </motion.div>
-          </motion.div>
+            </div>
+          </div>
         </section>
 
-        <motion.section
+        <section
           id="about"
           className="mx-auto w-full max-w-6xl px-5 py-16"
-          initial="hidden"
-          whileInView="show"
-          viewport={{ once: true, amount: 0.2 }}
-          variants={sectionVariant}
         >
           <h2 className="text-3xl font-semibold tracking-tight text-slate-900">About Derive AI</h2>
           <div className="mt-6 rounded-2xl border border-slate-200 bg-white p-6 leading-7 text-slate-700 shadow-sm">
@@ -330,15 +273,11 @@ export default function LandingPage(): JSX.Element {
               Our goal is to make complex, AI-powered math workflows feel immediate, accessible, and optimized.
             </p>
           </div>
-        </motion.section>
+        </section>
 
-        <motion.section
+        <section
           id="tech"
           className="mx-auto w-full max-w-6xl px-5 py-16"
-          initial="hidden"
-          whileInView="show"
-          viewport={{ once: true, amount: 0.25 }}
-          variants={sectionVariant}
         >
           <h2 className="text-3xl font-semibold tracking-tight text-slate-900">Technology Stack</h2>
           <div className="mt-6 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
@@ -349,7 +288,7 @@ export default function LandingPage(): JSX.Element {
               </div>
             ))}
           </div>
-        </motion.section>
+        </section>
       </main>
 
       <footer className="relative z-10 border-t border-slate-200 bg-white">

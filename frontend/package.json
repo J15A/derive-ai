@@ -9,11 +9,9 @@
     "preview": "vite preview"
   },
   "dependencies": {
-    "@auth0/auth0-react": "^2.13.0",
     "@fontsource/caveat": "^5.2.8",
     "@fontsource/indie-flower": "^5.2.7",
     "@types/katex": "^0.16.8",
-    "framer-motion": "^12.33.0",
     "katex": "^0.16.28",
     "lucide-react": "^0.563.0",
     "marked": "^15.0.7",

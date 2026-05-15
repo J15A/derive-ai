@@ -3,14 +3,12 @@ import { getNotesCollection } from "../mongodb.js";
 import type { Note } from "../types.js";
 
 const router = Router();
+const LOCAL_OWNER_SUB = "local-user";
 
 // Get all notes
 router.get("/", async (req: Request, res: Response) => {
   try {
-    const ownerSub = req.auth?.sub;
-    if (!ownerSub) {
-      return res.status(401).json({ error: "Unauthorized" });
-    }
+    const ownerSub = LOCAL_OWNER_SUB;
 
     const notes = await getNotesCollection()
       .find({ ownerSub })
@@ -27,10 +25,7 @@ router.get("/", async (req: Request, res: Response) => {
 // Get a single note by id
 router.get("/:id", async (req: Request, res: Response) => {
   try {
-    const ownerSub = req.auth?.sub;
-    if (!ownerSub) {
-      return res.status(401).json({ error: "Unauthorized" });
-    }
+    const ownerSub = LOCAL_OWNER_SUB;
 
     const { id } = req.params;
     const note = await getNotesCollection().findOne({ ownerSub, id });
@@ -49,10 +44,7 @@ router.get("/:id", async (req: Request, res: Response) => {
 // Create a new note
 router.post("/", async (req: Request, res: Response) => {
   try {
-    const ownerSub = req.auth?.sub;
-    if (!ownerSub) {
-      return res.status(401).json({ error: "Unauthorized" });
-    }
+    const ownerSub = LOCAL_OWNER_SUB;
 
     const incoming = req.body as Partial<Note>;
     
@@ -85,10 +77,7 @@ router.post("/", async (req: Request, res: Response) => {
 // Update an existing note
 router.put("/:id", async (req: Request, res: Response) => {
   try {
-    const ownerSub = req.auth?.sub;
-    if (!ownerSub) {
-      return res.status(401).json({ error: "Unauthorized" });
-    }
+    const ownerSub = LOCAL_OWNER_SUB;
 
     const { id } = req.params;
     const updates: Partial<Note> = req.body;
@@ -117,10 +106,7 @@ router.put("/:id", async (req: Request, res: Response) => {
 // Delete a note
 router.delete("/:id", async (req: Request, res: Response) => {
   try {
-    const ownerSub = req.auth?.sub;
-    if (!ownerSub) {
-      return res.status(401).json({ error: "Unauthorized" });
-    }
+    const ownerSub = LOCAL_OWNER_SUB;
 
     const { id } = req.params;
     
@@ -140,10 +126,7 @@ router.delete("/:id", async (req: Request, res: Response) => {
 // Bulk save notes (useful for syncing)
 router.post("/bulk", async (req: Request, res: Response) => {
   try {
-    const ownerSub = req.auth?.sub;
-    if (!ownerSub) {
-      return res.status(401).json({ error: "Unauthorized" });
-    }
+    const ownerSub = LOCAL_OWNER_SUB;
 
     const notes = req.body as Partial<Note>[];
     
