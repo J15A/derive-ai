@@ -8,7 +8,20 @@
 
 import type { ChatRole, Note } from "../types";
 
-const API_BASE_URL = import.meta.env.VITE_API_URL || "http://localhost:3001/api";
+function normalizeApiBaseUrl(value?: string): string {
+  const fallback = "http://localhost:3001/api";
+  const raw = (value ?? "").trim();
+  if (!raw) {
+    return fallback;
+  }
+
+  const withoutTrailingSlash = raw.replace(/\/+$/, "");
+  return withoutTrailingSlash.endsWith("/api")
+    ? withoutTrailingSlash
+    : `${withoutTrailingSlash}/api`;
+}
+
+const API_BASE_URL = normalizeApiBaseUrl(import.meta.env.VITE_API_URL);
 
 export async function loadNotesFromDb(): Promise<Note[]> {
   try {
